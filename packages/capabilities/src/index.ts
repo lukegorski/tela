@@ -1,5 +1,6 @@
 // Import all capability modules to trigger registration
 import './wardrobe/index.js';
+import './item/index.js';
 
 // Re-export registry functions
 export {

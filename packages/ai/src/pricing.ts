@@ -11,13 +11,27 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
 
 /**
  * Calculate cost in fractional cents for a given model and token usage.
+ * Matches by exact name first, then by longest prefix (handles dated model
+ * variants like `gpt-5.4-mini-2026-03-17`).
  */
 export function calculateCost(
   model: string,
   inputTokens: number,
   outputTokens: number,
 ): number {
-  const pricing = MODEL_PRICING[model];
+  let pricing = MODEL_PRICING[model];
+
+  if (!pricing) {
+    // Find the longest pricing key that the model name starts with
+    let bestMatch = '';
+    for (const key of Object.keys(MODEL_PRICING)) {
+      if (model.startsWith(key) && key.length > bestMatch.length) {
+        bestMatch = key;
+      }
+    }
+    if (bestMatch) pricing = MODEL_PRICING[bestMatch];
+  }
+
   if (!pricing) return 0;
 
   return (

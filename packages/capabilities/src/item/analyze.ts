@@ -4,10 +4,10 @@ import { getDb, itemPhotos } from '@tela/db';
 import { call } from '@tela/ai';
 import { getPrompt } from '@tela/prompts';
 import { registerCapability } from '../registry.js';
+import { getRequestContext } from '../context/requestContext.js';
 import { getSupabaseAdmin, ITEM_PHOTOS_BUCKET } from '../storage/supabase.js';
 
 const input = z.object({
-  userId: z.string().uuid(),
   photoId: z.string().uuid(),
   locale: z.string().default('en'),
 });
@@ -46,7 +46,8 @@ export const analyzeItem = registerCapability({
   input,
   output,
 
-  async execute({ userId, photoId, locale }) {
+  async execute({ photoId, locale }) {
+    const { userId } = getRequestContext();
     const db = getDb();
 
     // Verify photo belongs to user and get the storage path

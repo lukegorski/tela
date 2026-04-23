@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
 
 // Mock @tela/db
 const mockInsert = vi.fn();
@@ -38,38 +37,38 @@ vi.mock('drizzle-orm', () => ({
 
 // Import after mocks
 const { addItem } = await import('./addItem.js');
+const { runInContext } = await import('../context/requestContext.js');
+
+const TEST_USER_ID = '550e8400-e29b-41d4-a716-446655440000';
+
+const validInput = {
+  photoId: '550e8400-e29b-41d4-a716-446655440001',
+  metadata: {
+    category: 'top',
+    subcategory: 't-shirt',
+    primaryColor: 'navy',
+    secondaryColor: null,
+    pattern: 'solid',
+    style: 'casual',
+    fit: 'regular',
+    length: null,
+    sleeveLength: 'short',
+    description: 'A navy blue t-shirt',
+    formalityScore: 0.3,
+    materialWeight: 'light' as const,
+    seasonCompatibility: ['spring', 'summer'] as const,
+    analysisLocale: 'en',
+  },
+};
+
+const TEST_CONTEXT = { userId: TEST_USER_ID, source: 'test' as const };
 
 describe('wardrobe.addItem', () => {
-  const validInput = {
-    userId: '550e8400-e29b-41d4-a716-446655440000',
-    photoId: '550e8400-e29b-41d4-a716-446655440001',
-    metadata: {
-      category: 'top',
-      subcategory: 't-shirt',
-      primaryColor: 'navy',
-      secondaryColor: null,
-      pattern: 'solid',
-      style: 'casual',
-      fit: 'regular',
-      length: null,
-      sleeveLength: 'short',
-      description: 'A navy blue t-shirt',
-      formalityScore: 0.3,
-      materialWeight: 'light' as const,
-      seasonCompatibility: ['spring', 'summer'] as const,
-      analysisLocale: 'en',
-    },
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
-
-    // Default mock chain: insert().values().returning()
     mockReturning.mockResolvedValue([{ id: 'item-001' }]);
     mockValues.mockReturnValue({ returning: mockReturning });
     mockInsert.mockReturnValue({ values: mockValues });
-
-    // Default mock chain: update().set().where()
     mockWhere.mockResolvedValue(undefined);
     mockSet.mockReturnValue({ where: mockWhere });
     mockUpdate.mockReturnValue({ set: mockSet });
@@ -80,14 +79,13 @@ describe('wardrobe.addItem', () => {
     expect(addItem.description).toContain('Add a clothing item');
   });
 
-  it('validates input schema accepts valid input', () => {
-    const result = addItem.input.safeParse(validInput);
+  it('input schema no longer accepts userId (auth context required instead)', () => {
+    // userId is no longer part of the input schema; passing it is silently dropped
+    const result = addItem.input.safeParse({ ...validInput, userId: 'whatever' });
     expect(result.success).toBe(true);
-  });
-
-  it('validates input schema rejects missing userId', () => {
-    const result = addItem.input.safeParse({ ...validInput, userId: 'not-a-uuid' });
-    expect(result.success).toBe(false);
+    if (result.success) {
+      expect((result.data as Record<string, unknown>).userId).toBeUndefined();
+    }
   });
 
   it('validates input schema rejects invalid formalityScore', () => {
@@ -100,12 +98,8 @@ describe('wardrobe.addItem', () => {
 
   it('validates input schema applies defaults for optional fields', () => {
     const minimalInput = {
-      userId: '550e8400-e29b-41d4-a716-446655440000',
       photoId: '550e8400-e29b-41d4-a716-446655440001',
-      metadata: {
-        category: 'top',
-        primaryColor: 'navy',
-      },
+      metadata: { category: 'top', primaryColor: 'navy' },
     };
     const result = addItem.input.safeParse(minimalInput);
     expect(result.success).toBe(true);
@@ -126,52 +120,48 @@ describe('wardrobe.addItem', () => {
   });
 
   it('executes successfully when photo exists and closet exists', async () => {
-    // Photo found
     mockFindFirst
-      .mockResolvedValueOnce({ id: validInput.photoId, userId: validInput.userId })
-      // Closet found
-      .mockResolvedValueOnce({ id: 'closet-001', userId: validInput.userId });
-
-    // Insert returns item
+      .mockResolvedValueOnce({ id: validInput.photoId, userId: TEST_USER_ID })
+      .mockResolvedValueOnce({ id: 'closet-001', userId: TEST_USER_ID });
     mockReturning.mockResolvedValueOnce([{ id: 'item-001' }]);
 
-    const result = await addItem.execute(validInput);
+    const result = await runInContext(TEST_CONTEXT, () => addItem.execute(validInput));
 
     expect(result.itemId).toBe('item-001');
     expect(result.closetId).toBe('closet-001');
     expect(mockLogEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        userId: validInput.userId,
+        userId: TEST_USER_ID,
         type: 'wardrobe.item_added',
-        source: 'api',
+        source: 'test',
       }),
     );
   });
 
   it('creates closet if none exists', async () => {
-    // Photo found
     mockFindFirst
-      .mockResolvedValueOnce({ id: validInput.photoId, userId: validInput.userId })
-      // No closet found
+      .mockResolvedValueOnce({ id: validInput.photoId, userId: TEST_USER_ID })
       .mockResolvedValueOnce(null);
-
-    // Closet insert returns new closet
     mockReturning
       .mockResolvedValueOnce([{ id: 'new-closet-001' }])
-      // Item insert
       .mockResolvedValueOnce([{ id: 'item-001' }]);
 
-    const result = await addItem.execute(validInput);
+    const result = await runInContext(TEST_CONTEXT, () => addItem.execute(validInput));
 
     expect(result.closetId).toBe('new-closet-001');
-    expect(mockInsert).toHaveBeenCalledTimes(2); // closet + item
+    expect(mockInsert).toHaveBeenCalledTimes(2);
   });
 
   it('throws when photo not found', async () => {
     mockFindFirst.mockResolvedValueOnce(null);
 
-    await expect(addItem.execute(validInput)).rejects.toThrow(
-      'Photo not found or does not belong to user',
-    );
+    await expect(
+      runInContext(TEST_CONTEXT, () => addItem.execute(validInput)),
+    ).rejects.toThrow('Photo not found or does not belong to user');
+  });
+
+  it('throws when called outside a request context', async () => {
+    mockFindFirst.mockResolvedValueOnce({ id: validInput.photoId, userId: TEST_USER_ID });
+    await expect(addItem.execute(validInput)).rejects.toThrow('No RequestContext available');
   });
 });

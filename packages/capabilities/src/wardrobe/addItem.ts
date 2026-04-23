@@ -3,9 +3,9 @@ import { getDb, closetItems, closets, itemPhotos } from '@tela/db';
 import { logEvent } from '@tela/events';
 import { eq, sql } from 'drizzle-orm';
 import { registerCapability } from '../registry.js';
+import { getRequestContext } from '../context/requestContext.js';
 
 const input = z.object({
-  userId: z.string().uuid(),
   photoId: z.string().uuid(),
   metadata: z.object({
     category: z.string().min(1),
@@ -37,7 +37,8 @@ export const addItem = registerCapability({
   input,
   output,
 
-  async execute({ userId, photoId, metadata }) {
+  async execute({ photoId, metadata }) {
+    const { userId, source } = getRequestContext();
     const db = getDb();
 
     // Verify the photo exists and belongs to this user
@@ -97,7 +98,7 @@ export const addItem = registerCapability({
     await logEvent({
       userId,
       type: 'wardrobe.item_added',
-      source: 'api',
+      source,
       payload: {
         itemId: item.id,
         category: metadata.category,

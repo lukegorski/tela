@@ -2,9 +2,9 @@ import { z } from 'zod';
 import { eq, and, desc } from 'drizzle-orm';
 import { getDb, outfits } from '@tela/db';
 import { registerCapability } from '../registry.js';
+import { getRequestContext } from '../context/requestContext.js';
 
 const input = z.object({
-  userId: z.string().uuid(),
   savedOnly: z.boolean().default(false),
   limit: z.number().int().min(1).max(100).default(20),
   offset: z.number().int().min(0).default(0),
@@ -31,7 +31,8 @@ export const listOutfits = registerCapability({
   input,
   output,
 
-  async execute({ userId, savedOnly, limit, offset }) {
+  async execute({ savedOnly, limit, offset }) {
+    const { userId } = getRequestContext();
     const db = getDb();
     const where = savedOnly
       ? and(eq(outfits.userId, userId), eq(outfits.saved, true))

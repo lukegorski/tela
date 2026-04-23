@@ -3,9 +3,9 @@ import { and, eq, sql } from 'drizzle-orm';
 import { getDb, closetItems, closets } from '@tela/db';
 import { logEvent } from '@tela/events';
 import { registerCapability } from '../registry.js';
+import { getRequestContext } from '../context/requestContext.js';
 
 const input = z.object({
-  userId: z.string().uuid(),
   itemId: z.string().uuid(),
 });
 
@@ -23,7 +23,8 @@ export const removeItem = registerCapability({
   input,
   output,
 
-  async execute({ userId, itemId }) {
+  async execute({ itemId }) {
+    const { userId, source } = getRequestContext();
     const db = getDb();
 
     const item = await db.query.closetItems.findFirst({
@@ -47,7 +48,7 @@ export const removeItem = registerCapability({
     await logEvent({
       userId,
       type: 'wardrobe.item_removed',
-      source: 'api',
+      source,
       payload: { itemId, category: item.category },
     });
 

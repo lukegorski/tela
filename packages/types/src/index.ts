@@ -2,7 +2,9 @@
 
 export interface User {
   id: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
+  authUserId: string | null;
   displayName: string | null;
   avatarUrl: string | null;
   locale: string;
@@ -235,8 +237,10 @@ export interface WardrobeGap {
 }
 
 // ─── Event source ───
-
-export type EventSource = 'web' | 'mobile' | 'api' | 'mcp' | 'worker';
+//
+// Where a request originated. Mirrors CallSource in @tela/capabilities.
+// Used for both event log attribution and authorization decisions.
+export type EventSource = 'web' | 'mcp' | 'worker' | 'admin' | 'test';
 
 // ─── Capability types ───
 

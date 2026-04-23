@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { getDb, contexts } from '@tela/db';
 import { logEvent } from '@tela/events';
 import { registerCapability } from '../registry.js';
+import { getRequestContext } from './requestContext.js';
 import { fetchWeather } from './weather.js';
 
 const weatherSchema = z.object({
@@ -23,7 +24,6 @@ const occasionSchema = z.enum([
 ]);
 
 const input = z.object({
-  userId: z.string().uuid(),
   occasion: occasionSchema.default('everyday'),
   // Either pass weather directly or pass coords for OpenWeatherMap lookup
   weather: weatherSchema.optional(),
@@ -59,7 +59,8 @@ export const assembleContext = registerCapability({
   input,
   output,
 
-  async execute({ userId, occasion, weather, location, now, calendarContext }) {
+  async execute({ occasion, weather, location, now, calendarContext }) {
+    const { userId, source } = getRequestContext();
     const date = now ? new Date(now) : new Date();
 
     let resolvedWeather = weather ?? null;
@@ -93,7 +94,7 @@ export const assembleContext = registerCapability({
       await logEvent({
         userId,
         type: 'context.occasion_updated',
-        source: 'api',
+        source,
         payload: { contextId: ctx.id, occasion },
       });
     }

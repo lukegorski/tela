@@ -3,9 +3,9 @@ import { eq, desc, and } from 'drizzle-orm';
 import { getDb, closetItems } from '@tela/db';
 import { logEvent } from '@tela/events';
 import { registerCapability } from '../registry.js';
+import { getRequestContext } from '../context/requestContext.js';
 
 const input = z.object({
-  userId: z.string().uuid(),
   category: z.string().optional(),
   limit: z.number().int().min(1).max(200).default(50),
   offset: z.number().int().min(0).default(0),
@@ -37,7 +37,8 @@ export const listItems = registerCapability({
   input,
   output,
 
-  async execute({ userId, category, limit, offset }) {
+  async execute({ category, limit, offset }) {
+    const { userId, source } = getRequestContext();
     const db = getDb();
 
     const whereClause = category
@@ -66,7 +67,7 @@ export const listItems = registerCapability({
     await logEvent({
       userId,
       type: 'wardrobe.closet_viewed',
-      source: 'api',
+      source,
       payload: { category, limit, offset, returned: items.length },
     });
 

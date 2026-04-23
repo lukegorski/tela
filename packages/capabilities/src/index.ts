@@ -1,4 +1,5 @@
 // Import all capability modules to trigger registration
+import './auth/index.js';
 import './wardrobe/index.js';
 import './item/index.js';
 import './profile/index.js';
@@ -15,3 +16,12 @@ export {
 
 // Re-export types
 export type { Capability, RegisteredCapability } from './types.js';
+
+// Re-export request context for entry points (tRPC, MCP, workers, scripts)
+export {
+  runInContext,
+  getRequestContext,
+  tryGetRequestContext,
+  type RequestContext,
+  type CallSource,
+} from './context/requestContext.js';

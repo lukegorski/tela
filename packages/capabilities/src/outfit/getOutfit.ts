@@ -3,9 +3,9 @@ import { eq, and } from 'drizzle-orm';
 import { getDb, outfits, outfitItems } from '@tela/db';
 import { logEvent } from '@tela/events';
 import { registerCapability } from '../registry.js';
+import { getRequestContext } from '../context/requestContext.js';
 
 const input = z.object({
-  userId: z.string().uuid(),
   outfitId: z.string().uuid(),
 });
 
@@ -32,7 +32,8 @@ export const getOutfit = registerCapability({
   input,
   output,
 
-  async execute({ userId, outfitId }) {
+  async execute({ outfitId }) {
+    const { userId, source } = getRequestContext();
     const db = getDb();
 
     const outfit = await db.query.outfits.findFirst({
@@ -48,7 +49,7 @@ export const getOutfit = registerCapability({
     await logEvent({
       userId,
       type: 'outfit.viewed',
-      source: 'api',
+      source,
       payload: { outfitId },
     });
 

@@ -14,6 +14,7 @@ import { call } from '@tela/ai';
 import { getPrompt } from '@tela/prompts';
 import { logEvent } from '@tela/events';
 import { registerCapability } from '../registry.js';
+import { getRequestContext } from '../context/requestContext.js';
 
 const roleSchema = z.enum(['top', 'bottom', 'dress', 'shoes', 'outerwear', 'accessory']);
 
@@ -32,7 +33,6 @@ const aiResponseSchema = z.object({
 });
 
 const input = z.object({
-  userId: z.string().uuid(),
   contextId: z.string().uuid(),
   count: z.number().int().min(1).max(5).default(3),
 });
@@ -63,7 +63,8 @@ export const generateOutfits = registerCapability({
   input,
   output,
 
-  async execute({ userId, contextId, count }) {
+  async execute({ contextId, count }) {
+    const { userId, source } = getRequestContext();
     const db = getDb();
 
     // ─── Load context ───
@@ -216,7 +217,7 @@ export const generateOutfits = registerCapability({
     await logEvent({
       userId,
       type: 'outfit.generated',
-      source: 'api',
+      source,
       payload: {
         contextId,
         outfitCount: savedOutfits.length,

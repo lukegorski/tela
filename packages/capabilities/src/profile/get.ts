@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { getDb, styleProfiles } from '@tela/db';
 import { logEvent } from '@tela/events';
 import { registerCapability } from '../registry.js';
+import { getRequestContext } from '../context/requestContext.js';
 
 const dimensionsSchema = z.object({
   minimalMaximal: z.number(),
@@ -12,9 +13,7 @@ const dimensionsSchema = z.object({
   structuredFluid: z.number(),
 });
 
-const input = z.object({
-  userId: z.string().uuid(),
-});
+const input = z.object({});
 
 const output = z.object({
   profileId: z.string().uuid(),
@@ -44,7 +43,8 @@ export const getProfile = registerCapability({
   input,
   output,
 
-  async execute({ userId }) {
+  async execute() {
+    const { userId, source } = getRequestContext();
     const db = getDb();
     const profile = await db.query.styleProfiles.findFirst({
       where: eq(styleProfiles.userId, userId),
@@ -58,7 +58,7 @@ export const getProfile = registerCapability({
     await logEvent({
       userId,
       type: 'profile.viewed',
-      source: 'api',
+      source,
       payload: { profileId: profile.id },
     });
 

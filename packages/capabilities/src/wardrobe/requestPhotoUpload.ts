@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { registerCapability } from '../registry.js';
+import { getRequestContext } from '../context/requestContext.js';
 import { getSupabaseAdmin, ITEM_PHOTOS_BUCKET } from '../storage/supabase.js';
 
 const input = z.object({
-  userId: z.string().uuid(),
   filename: z.string().min(1).max(255),
   mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/heic']),
 });
@@ -26,7 +26,10 @@ export const requestPhotoUpload = registerCapability({
   input,
   output,
 
-  async execute({ userId, filename, mimeType }) {
+  async execute({ filename, mimeType }) {
+    const { userId } = getRequestContext();
+    // Suppress unused warnings — mimeType reserved for future bucket-side validation
+    void mimeType;
     const supabase = getSupabaseAdmin();
 
     // Sanitize filename — keep extension, replace path-unsafe chars

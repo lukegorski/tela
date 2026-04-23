@@ -82,6 +82,6 @@ export const outfitItems = pgTable('outfit_items', {
     .references(() => outfits.id, { onDelete: 'cascade' }),
   closetItemId: uuid('closet_item_id')
     .notNull()
-    .references(() => closetItems.id),
+    .references(() => closetItems.id, { onDelete: 'cascade' }),
   role: varchar('role', { length: 20 }).notNull(),
 });

@@ -5,6 +5,7 @@ import { call } from '@tela/ai';
 import { getPrompt } from '@tela/prompts';
 import { logEvent } from '@tela/events';
 import { registerCapability } from '../registry.js';
+import { getRequestContext } from '../context/requestContext.js';
 
 const dimensionsSchema = z.object({
   minimalMaximal: z.number().min(0).max(1),
@@ -26,7 +27,6 @@ const dimensionsOutputSchema = z.object({
 });
 
 const input = z.object({
-  userId: z.string().uuid(),
   locale: z.string().default('en'),
   reason: z.string().default('initial_read'),
 });
@@ -57,7 +57,8 @@ export const closetRead = registerCapability({
   input,
   output,
 
-  async execute({ userId, locale, reason }) {
+  async execute({ locale, reason }) {
+    const { userId, source } = getRequestContext();
     const db = getDb();
 
     // Load all closet items for this user
@@ -88,7 +89,7 @@ export const closetRead = registerCapability({
     await logEvent({
       userId,
       type: 'profile.closet_read_started',
-      source: 'api',
+      source,
       payload: { itemCount: items.length, reason },
     });
 
@@ -207,7 +208,7 @@ export const closetRead = registerCapability({
     await logEvent({
       userId,
       type: 'profile.closet_read_completed',
-      source: 'api',
+      source,
       payload: {
         profileId,
         versionId: version.id,
@@ -219,7 +220,7 @@ export const closetRead = registerCapability({
     await logEvent({
       userId,
       type: 'profile.dimensions_derived',
-      source: 'api',
+      source,
       payload: { profileId, dimensions: parsed.data.dimensions },
     });
 

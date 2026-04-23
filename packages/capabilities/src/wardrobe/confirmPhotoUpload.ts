@@ -2,10 +2,10 @@ import { z } from 'zod';
 import { getDb, itemPhotos } from '@tela/db';
 import { logEvent } from '@tela/events';
 import { registerCapability } from '../registry.js';
+import { getRequestContext } from '../context/requestContext.js';
 import { getSupabaseAdmin, ITEM_PHOTOS_BUCKET } from '../storage/supabase.js';
 
 const input = z.object({
-  userId: z.string().uuid(),
   storagePath: z.string().min(1),
   width: z.number().int().positive().nullable().default(null),
   height: z.number().int().positive().nullable().default(null),
@@ -28,7 +28,9 @@ export const confirmPhotoUpload = registerCapability({
   input,
   output,
 
-  async execute({ userId, storagePath, width, height, capturedAt }) {
+  async execute({ storagePath, width, height, capturedAt }) {
+    const { userId, source } = getRequestContext();
+
     // Verify the storage path belongs to this user (prevents path traversal / cross-user access)
     if (!storagePath.startsWith(`${userId}/`)) {
       throw new Error('Storage path does not belong to user');
@@ -66,7 +68,7 @@ export const confirmPhotoUpload = registerCapability({
     await logEvent({
       userId,
       type: 'wardrobe.photo_uploaded',
-      source: 'api',
+      source,
       payload: { photoId: photo.id, storagePath: photo.storagePath },
     });
 

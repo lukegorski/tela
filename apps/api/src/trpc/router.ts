@@ -1,38 +1,60 @@
-import { initTRPC, type AnyTRPCRouter } from '@trpc/server';
+import { initTRPC, TRPCError, type AnyTRPCRouter } from '@trpc/server';
 import { z } from 'zod';
-import { getAllCapabilities, type RegisteredCapability } from '@tela/capabilities';
+import {
+  getAllCapabilities,
+  runInContext,
+  type RegisteredCapability,
+} from '@tela/capabilities';
 import type { TRPCContext } from './context.js';
 
 const t = initTRPC.context<TRPCContext>().create();
 
+/**
+ * Public procedure — no auth required. Use sparingly.
+ */
 const publicProcedure = t.procedure;
 
 /**
+ * Authed procedure — requires a valid Authorization header. Capability calls
+ * run inside the request context, so capabilities can read userId via
+ * getRequestContext().
+ */
+const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
+  if (ctx.authError) {
+    throw new TRPCError({ code: 'UNAUTHORIZED', message: ctx.authError.message });
+  }
+  if (!ctx.auth) {
+    throw new TRPCError({
+      code: 'UNAUTHORIZED',
+      message: 'Authentication required. Pass Authorization: Bearer <token>',
+    });
+  }
+  return next({ ctx: { ...ctx, auth: ctx.auth } });
+});
+
+/**
  * Convert a registered capability into a tRPC mutation procedure.
- * The capability's input/output schemas are reused directly — no duplication.
+ * Capability execution runs inside runInContext() so getRequestContext() works.
  */
 function capabilityToProcedure(capability: RegisteredCapability) {
-  return publicProcedure
+  return authedProcedure
     .input(capability.inputSchema)
-    .mutation(async ({ input }) => capability.execute(input));
+    .mutation(async ({ input, ctx }) => runInContext(ctx.auth, () => capability.execute(input)));
 }
 
 /**
- * Group capabilities by domain (the part before the first `.` in the name)
- * and build a tRPC router per domain.
- *
- * E.g. wardrobe.addItem, wardrobe.getItem → router.wardrobe.{addItem, getItem}
+ * Group capabilities by domain → build a tRPC router per domain.
  */
-function buildDomainRouters(capabilities: RegisteredCapability[]): Record<string, AnyTRPCRouter> {
+function buildDomainRouters(
+  capabilities: RegisteredCapability[],
+): Record<string, AnyTRPCRouter> {
   const grouped: Record<string, Record<string, ReturnType<typeof capabilityToProcedure>>> = {};
-
   for (const cap of capabilities) {
     const [domain, action] = cap.name.split('.');
     if (!domain || !action) continue;
     grouped[domain] ??= {};
     grouped[domain][action] = capabilityToProcedure(cap);
   }
-
   const routers: Record<string, AnyTRPCRouter> = {};
   for (const [domain, procedures] of Object.entries(grouped)) {
     routers[domain] = t.router(procedures);
@@ -40,22 +62,24 @@ function buildDomainRouters(capabilities: RegisteredCapability[]): Record<string
   return routers;
 }
 
-// Generic dispatch + discovery endpoints
 const capabilityRouter = t.router({
-  execute: publicProcedure
+  // Generic capability executor — also requires auth
+  execute: authedProcedure
     .input(z.object({ name: z.string(), input: z.unknown() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const capability = getAllCapabilities().find((c) => c.name === input.name);
-      if (!capability) throw new Error(`Unknown capability: ${input.name}`);
-      return capability.execute(input.input);
+      if (!capability) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: `Unknown capability: ${input.name}` });
+      }
+      return runInContext(ctx.auth, () => capability.execute(input.input));
     }),
 
+  // Public discovery endpoint — no auth needed
   list: publicProcedure.query(() =>
     getAllCapabilities().map((c) => ({ name: c.name, description: c.description })),
   ),
 });
 
-// Build domain routers from the capability registry at module load
 const domainRouters = buildDomainRouters(getAllCapabilities());
 
 export const appRouter = t.router({

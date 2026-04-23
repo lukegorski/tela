@@ -3,9 +3,9 @@ import { eq, and } from 'drizzle-orm';
 import { getDb, outfits } from '@tela/db';
 import { logEvent } from '@tela/events';
 import { registerCapability } from '../registry.js';
+import { getRequestContext } from '../context/requestContext.js';
 
 const input = z.object({
-  userId: z.string().uuid(),
   outfitId: z.string().uuid(),
 });
 
@@ -19,7 +19,8 @@ export const deleteOutfit = registerCapability({
   input,
   output,
 
-  async execute({ userId, outfitId }) {
+  async execute({ outfitId }) {
+    const { userId, source } = getRequestContext();
     const db = getDb();
     const result = await db
       .delete(outfits)
@@ -31,7 +32,7 @@ export const deleteOutfit = registerCapability({
     await logEvent({
       userId,
       type: 'outfit.deleted',
-      source: 'api',
+      source,
       payload: { outfitId },
     });
 

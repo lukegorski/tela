@@ -2,6 +2,8 @@
 import './wardrobe/index.js';
 import './item/index.js';
 import './profile/index.js';
+import './context/index.js';
+import './outfit/index.js';
 
 // Re-export registry functions
 export {

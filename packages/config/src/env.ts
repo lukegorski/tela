@@ -12,6 +12,9 @@ const envSchema = z.object({
   // OpenAI
   OPENAI_API_KEY: z.string().startsWith('sk-'),
 
+  // OpenWeatherMap (optional — context.assemble falls back gracefully if unset)
+  OPENWEATHERMAP_API_KEY: z.string().min(1).optional(),
+
   // Sentry
   SENTRY_DSN: z.string().url().optional(),
 

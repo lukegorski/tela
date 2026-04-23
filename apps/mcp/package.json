@@ -1,0 +1,30 @@
+{
+  "name": "@tela/mcp",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "tela-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.20.0",
+    "zod": "^3.24.0",
+    "@tela/capabilities": "workspace:*",
+    "@tela/config": "workspace:*",
+    "@tela/db": "workspace:*",
+    "@tela/events": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

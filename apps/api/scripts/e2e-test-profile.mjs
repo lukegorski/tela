@@ -95,11 +95,24 @@ async function main() {
   let totalAnalysisCost = 0;
   for (let i = 0; i < allImages.length; i++) {
     const path = allImages[i];
-    const { analysis, costCents } = await uploadAndAnalyze(user.id, path);
-    totalAnalysisCost += costCents;
-    console.log(
-      `   ${i + 1}/${allImages.length} ${basename(path)} → ${analysis.metadata.category}/${analysis.metadata.subcategory ?? '—'} (${analysis.metadata.primaryColor})`,
-    );
+    let attempt = 0;
+    while (true) {
+      try {
+        const { analysis, costCents } = await uploadAndAnalyze(user.id, path);
+        totalAnalysisCost += costCents;
+        console.log(
+          `   ${i + 1}/${allImages.length} ${basename(path)} → ${analysis.metadata.category}/${analysis.metadata.subcategory ?? '—'} (${analysis.metadata.primaryColor})`,
+        );
+        break;
+      } catch (err) {
+        attempt++;
+        if (attempt >= 3) throw err;
+        console.log(`     retry ${attempt}/3 after error: ${err.message}`);
+        await new Promise((r) => setTimeout(r, 1500 * attempt));
+      }
+    }
+    // small delay between uploads to be friendly to the storage layer
+    await new Promise((r) => setTimeout(r, 250));
   }
   console.log(`   total analysis cost: ${totalAnalysisCost.toFixed(4)}¢`);
 

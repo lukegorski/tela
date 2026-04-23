@@ -6,19 +6,56 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { trpcServer } from '@hono/trpc-server';
+import * as Sentry from '@sentry/node';
 import { initSentry } from './sentry.js';
 import { logger } from './logger.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { appRouter } from './trpc/router.js';
 import { createContext } from './trpc/context.js';
+import { mountCostDashboard } from './admin/costs.js';
 import { closeDb } from '@tela/db';
+import { setObservabilityHooks } from '@tela/capabilities';
 
 // Initialize Sentry (no-ops if DSN not set)
 initSentry();
 
 // Import capabilities to trigger registration
 import '@tela/capabilities';
+
+// Wire capability execution into pino + Sentry. Capabilities don't depend on
+// either directly — these hooks are registered here at app startup.
+setObservabilityHooks({
+  onStart: ({ capabilityName, userId, source, requestId }) => {
+    logger.debug({ capabilityName, userId, source, requestId }, 'capability started');
+  },
+  onComplete: ({ capabilityName, userId, source, requestId, durationMs }) => {
+    logger.info(
+      { capabilityName, userId, source, requestId, durationMs: Math.round(durationMs) },
+      'capability completed',
+    );
+  },
+  onError: ({ capabilityName, userId, source, requestId, durationMs, error }) => {
+    logger.error(
+      {
+        capabilityName,
+        userId,
+        source,
+        requestId,
+        durationMs: Math.round(durationMs),
+        err: { message: error.message, stack: error.stack },
+      },
+      'capability failed',
+    );
+    Sentry.withScope((scope) => {
+      scope.setTag('capability', capabilityName);
+      if (userId) scope.setUser({ id: userId });
+      if (source) scope.setTag('source', source);
+      if (requestId) scope.setTag('requestId', requestId);
+      Sentry.captureException(error);
+    });
+  },
+});
 
 // ─── App ───
 
@@ -33,6 +70,9 @@ app.onError(errorHandler);
 app.get('/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Read-only admin cost dashboard (HTML + JSON), service-account auth required
+mountCostDashboard(app);
 
 // Mount tRPC
 app.use(

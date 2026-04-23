@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "tela-eval": "./dist/eval/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -14,15 +17,22 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "eval": "tsx src/eval/cli.ts"
   },
   "dependencies": {
     "@tela/ai": "workspace:*",
     "@tela/db": "workspace:*",
+    "@tela/prompts": "workspace:*",
     "@tela/types": "workspace:*",
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.6.0",
+    "zod": "^3.24.0",
     "vitest": "^3.1.0"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.8.0"
   }
 }

@@ -1,0 +1,49 @@
+name: minimal-wardrobe-work-day
+description: Generate 3 outfits for a work day from a 6-item neutral wardrobe
+input:
+  userPrompt: "Generate 3 outfits for the context above."
+  variables:
+    style_profile: |
+      Profile text:
+      You wear minimal, clean, slightly preppy looks in neutral colors.
+      Disciplined wardrobe of foundational pieces.
+
+      Dimensions (0=left, 1=right):
+        minimalMaximal: 0.20
+        classicTrendy: 0.15
+        casualFormal: 0.55
+        subtleBold: 0.20
+        structuredFluid: 0.30
+
+      Key signals:
+        loves-color:navy (+0.9)
+        loves-color:white (+0.8)
+        avoid-color:bright-colors (-0.9)
+    stylist_rules: |
+      [1] (color) Every outfit must contain no more than three colors. This is the rule.
+      [2] (color) Navy + cream/white + brown is a safe pairing.
+      [3] (silhouette) Match formality across the outfit.
+    context_summary: |
+      Occasion: work
+      Time of day: morning
+      Season: spring
+      Calendar: Standup at 10am, lunch with cofounder
+    wardrobe_items: |
+      id=11111111-1111-1111-1111-111111111101 category=top white t-shirt [regular] formality:0.30 — A clean white crew tee.
+      id=11111111-1111-1111-1111-111111111102 category=top navy polo shirt [slim] formality:0.55 — A navy short-sleeve polo.
+      id=11111111-1111-1111-1111-111111111103 category=bottom dark indigo jeans [slim] formality:0.40 — Slim straight dark indigo jeans.
+      id=11111111-1111-1111-1111-111111111104 category=bottom black trousers [tailored] formality:0.70 — Black tailored trousers.
+      id=11111111-1111-1111-1111-111111111105 category=shoes white sneakers formality:0.30 — Clean white leather sneakers.
+      id=11111111-1111-1111-1111-111111111106 category=shoes brown loafers formality:0.65 — Brown leather penny loafers.
+    forbidden_pairings: "(none — this is the first outfit generation for this user)"
+    locale: "en"
+
+expect:
+  isValidJson: true
+  hasKeys: ["outfits"]
+  # The 6 wardrobe item UUIDs must each appear at most a few times across outputs.
+  # We just check that the response references one of them by UUID, which would
+  # fail if the model invented an item.
+  contains: ["11111111-1111-1111-1111-1111111111"]
+maxCostCents: 5.0
+maxLatencyMs: 60000

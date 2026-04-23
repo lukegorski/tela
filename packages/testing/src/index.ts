@@ -1,3 +1,7 @@
-// Prompt evaluation harness and shared test utilities.
-// Will be built out during Week 2 alongside the AI gateway integration tests.
-export {};
+// Prompt evaluation harness — see src/eval/.
+// Most consumers use the CLI: `pnpm --filter @tela/testing eval <prompt>`.
+// Programmatic use:
+export { runEval } from './eval/runner.js';
+export { loadGoldenCases, listAvailablePrompts } from './eval/loader.js';
+export { evaluateAssertions } from './eval/assertions.js';
+export type { GoldenCase, CaseResult, EvalRun } from './eval/types.js';

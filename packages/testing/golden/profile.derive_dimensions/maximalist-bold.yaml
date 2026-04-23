@@ -1,0 +1,31 @@
+name: maximalist-bold
+description: A vibrant, layered, trend-forward wardrobe should score high on minimalMaximal and subtleBold
+input:
+  userPrompt: "Extract dimensions from the profile."
+  variables:
+    profile_text: |
+      ## Who You Are Right Now
+      You dress loud. Bright colors, bold prints — leopard, chevron stripes, neon
+      pink. Every outfit features at least one statement piece, often three.
+      Layering is a core part of your style: a graphic tee under a sheer top
+      under a vintage blazer with a beaded necklace. You shop trends aggressively;
+      half your wardrobe was bought in the last six months.
+
+      ## Strengths
+      - Fearless with color
+      - Strong personal brand
+      - Always interesting to look at
+
+      ## Aesthetic Direction
+      Eclectic, expressive, trend-forward, almost theatrical. You want to be seen.
+
+expect:
+  isValidJson: true
+  hasKeys: ["dimensions", "confidence", "signals"]
+  contains: ["minimalMaximal", "subtleBold"]
+  # The model should put these dimensions on the high end. We assert via substring
+  # because we want to see "minimalMaximal" appear in the output structure (it's
+  # a key) but the actual numeric checks happen in the runner via JSON inspection
+  # in the future. For now this just verifies structural correctness.
+maxCostCents: 1.0
+maxLatencyMs: 30000

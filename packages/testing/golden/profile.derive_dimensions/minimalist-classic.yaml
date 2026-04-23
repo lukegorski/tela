@@ -1,0 +1,29 @@
+name: minimalist-classic
+description: A wardrobe of neutral, structured staples should score low on all 5 dimensions
+input:
+  userPrompt: "Extract dimensions from the profile."
+  variables:
+    profile_text: |
+      ## Who You Are Right Now
+      You wear almost exclusively neutral colors — white, navy, gray, black — in
+      classic silhouettes. Crew neck tees, straight-leg jeans, button-up shirts,
+      a single navy blazer. Nothing in your wardrobe is loud or trend-driven.
+      You favor structured, well-fitting pieces over flowing or oversized ones.
+
+      ## Strengths
+      - Disciplined neutral palette
+      - Foundational pieces that always work
+      - No fashion mistakes anywhere
+
+      ## Aesthetic Direction
+      Quiet, classic, slightly preppy. The kind of wardrobe that ages well.
+
+expect:
+  isValidJson: true
+  hasKeys: ["dimensions", "confidence", "signals"]
+  keyTypes:
+    dimensions: object
+    confidence: object
+    signals: array
+maxCostCents: 1.0
+maxLatencyMs: 30000

@@ -2,6 +2,7 @@ import { getDb, generations } from '@tela/db';
 import type { AIProvider, ChatParams, AICallResult, AICallProvenance } from './types.js';
 import { calculateCost } from './pricing.js';
 import { OpenAIProvider } from './providers/openai.js';
+import { checkRateLimitsBeforeCall, checkRateLimitsAfterCall } from './rateLimits.js';
 
 let _provider: AIProvider | null = null;
 
@@ -51,6 +52,9 @@ export interface GatewayCallParams {
  * Every call is logged to the generations table. No exceptions.
  */
 export async function call<T>(params: GatewayCallParams): Promise<AICallResult<T>> {
+  // Enforce daily rate limits BEFORE incurring cost
+  await checkRateLimitsBeforeCall(params.userId, params.operation);
+
   const provider = getProvider();
   const start = performance.now();
 
@@ -140,6 +144,12 @@ export async function call<T>(params: GatewayCallParams): Promise<AICallResult<T
     latencyMs,
     costCents,
   };
+
+  // Check per-call cost cap after the call completes (the generation is
+  // already logged so the spend is recorded — this surfaces a runaway prompt
+  // as a loud error so we know to investigate). Caller catches RateLimitError
+  // and decides how to surface to the user.
+  await checkRateLimitsAfterCall(params.userId, params.operation, costCents);
 
   return { data: parsedOutput, provenance };
 }

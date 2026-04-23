@@ -1,0 +1,26 @@
+name: casual-relaxed
+description: A lounge/athleisure wardrobe should score low on casualFormal and high on structuredFluid
+input:
+  userPrompt: "Extract dimensions from the profile."
+  variables:
+    profile_text: |
+      ## Who You Are Right Now
+      You live in athleisure and casual basics. T-shirts, hoodies, joggers,
+      sweatpants, sneakers. Soft fabrics, relaxed cuts, oversized fits.
+      Almost nothing tailored or structured in your closet — no blazers,
+      no dress shirts, no leather shoes. Your nicest outfit is probably
+      a clean white tee with dark jeans.
+
+      ## Strengths
+      - Comfortable in your own skin
+      - Wardrobe matches your lifestyle
+      - Easy to get dressed
+
+      ## Aesthetic Direction
+      Relaxed, off-duty, sport-casual. Form follows function.
+
+expect:
+  isValidJson: true
+  hasKeys: ["dimensions", "confidence", "signals"]
+maxCostCents: 1.0
+maxLatencyMs: 30000

@@ -25,3 +25,12 @@ export {
   type RequestContext,
   type CallSource,
 } from './context/requestContext.js';
+
+// Re-export observability hooks for apps to register their own loggers / Sentry / OTel
+export {
+  setObservabilityHooks,
+  type ObservabilityHooks,
+  type CapabilityExecutionEvent,
+  type CapabilityCompletedEvent,
+  type CapabilityErrorEvent,
+} from './observability.js';

@@ -12,3 +12,4 @@ export type {
 export { OpenAIProvider } from './providers/openai.js';
 export { MockProvider } from './providers/mock.js';
 export { calculateCost } from './pricing.js';
+export { RateLimitError } from './rateLimits.js';

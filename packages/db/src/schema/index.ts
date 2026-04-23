@@ -6,3 +6,4 @@ export { events } from './events.js';
 export { prompts, promptVersions } from './prompts.js';
 export { annotatedExamples, stylistRules, wardrobeGaps } from './knowledge.js';
 export { chatConversations, chatMessages, tryOnJobs, translations } from './stubs.js';
+export { rateLimits } from './rateLimits.js';

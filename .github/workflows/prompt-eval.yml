@@ -1,0 +1,83 @@
+name: Prompt Eval
+
+on:
+  pull_request:
+    paths:
+      - 'packages/prompts/templates/**'
+      - 'packages/testing/golden/**'
+      - 'packages/testing/src/**'
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Prompt name (e.g. profile.derive_dimensions). Leave blank for all.'
+        required: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  eval:
+    name: Run prompt evals
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Required so the workflow can fetch secrets from Doppler. Stored as a
+    # repository secret named DOPPLER_TOKEN_DEV (a Doppler service token
+    # scoped to the dev config).
+    env:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN_DEV }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace
+        run: pnpm build
+
+      - name: Install Doppler CLI
+        run: |
+          curl -sL --tlsv1.2 --proto '=https' \
+            -o /tmp/doppler.tar.gz \
+            "https://github.com/DopplerHQ/cli/releases/download/3.76.0/doppler_3.76.0_linux_amd64.tar.gz"
+          mkdir -p $HOME/.local/bin
+          tar -xzf /tmp/doppler.tar.gz -C $HOME/.local/bin doppler
+          chmod +x $HOME/.local/bin/doppler
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Verify Doppler auth
+        run: doppler me
+
+      - name: List available prompts
+        run: doppler run -- pnpm --filter @tela/testing eval --list
+
+      - name: Run eval (specific prompt)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.prompt != ''
+        run: doppler run -- pnpm --filter @tela/testing eval ${{ github.event.inputs.prompt }}
+
+      - name: Run eval (all prompts)
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.prompt == ''
+        run: |
+          set -e
+          # List prompts directly from filesystem (the CLI list output is decorated)
+          for prompt in $(ls packages/testing/golden/); do
+            if [ -d "packages/testing/golden/$prompt" ]; then
+              echo "::group::eval: $prompt"
+              doppler run -- pnpm --filter @tela/testing eval "$prompt"
+              echo "::endgroup::"
+            fi
+          done

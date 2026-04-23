@@ -1,0 +1,29 @@
+{
+  "name": "tela",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "test:unit": "turbo test:unit",
+    "clean": "turbo clean",
+    "db:generate": "turbo db:generate --filter=@tela/db",
+    "db:migrate": "turbo db:migrate --filter=@tela/db",
+    "db:push": "turbo db:push --filter=@tela/db",
+    "prompts:sync": "turbo prompts:sync --filter=@tela/prompts"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.0",
+    "prettier": "^3.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.30.0",
+    "@typescript-eslint/parser": "^8.30.0",
+    "eslint": "^9.25.0"
+  }
+}

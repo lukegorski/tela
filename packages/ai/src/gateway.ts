@@ -153,3 +153,107 @@ export async function call<T>(params: GatewayCallParams): Promise<AICallResult<T
 
   return { data: parsedOutput, provenance };
 }
+
+// ─── Image edit (gpt-image-1.5 etc.) ───
+
+export interface GatewayImageParams {
+  operation: string;
+  userId: string;
+  promptName: string;
+  promptVersionId: string;
+  prompt: string;
+  /** Source image as data URL */
+  sourceImageDataUrl: string;
+  /** Orchestration model (e.g. 'gpt-5.4') */
+  model?: string;
+  /** Image generation tool model (e.g. 'gpt-image-1.5') */
+  imageModel?: string;
+  size?: string;
+  quality?: 'low' | 'medium' | 'high';
+  inputFidelity?: 'auto' | 'low' | 'high';
+}
+
+export interface GatewayImageResult {
+  pngBuffer: Buffer;
+  provenance: AICallProvenance;
+}
+
+/**
+ * Generate / edit an image via the gateway. Handles rate limits, retries,
+ * and provenance logging same as call(). Cost is per-image based on the
+ * image model in pricing.ts (image pricing is encoded as outputCostPer1k
+ * representing cost per 1000 images).
+ */
+export async function image(params: GatewayImageParams): Promise<GatewayImageResult> {
+  const provider = getProvider();
+  if (!provider.imageEdit) {
+    throw new Error('Configured AI provider does not support image generation');
+  }
+
+  await checkRateLimitsBeforeCall(params.userId, params.operation);
+
+  const start = performance.now();
+  const orchModel = params.model ?? 'gpt-5.4';
+  const imageModel = params.imageModel ?? 'gpt-image-1.5';
+
+  let lastError: Error | null = null;
+  let response: Awaited<ReturnType<NonNullable<AIProvider['imageEdit']>>> | undefined;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      response = await provider.imageEdit({
+        model: orchModel,
+        imageModel,
+        sourceImageDataUrl: params.sourceImageDataUrl,
+        prompt: params.prompt,
+        size: params.size ?? '1024x1536',
+        quality: params.quality ?? 'medium',
+        inputFidelity: params.inputFidelity ?? 'high',
+      });
+      break;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < 3) {
+        await new Promise((r) => setTimeout(r, attempt * 1000));
+      }
+    }
+  }
+  if (!response) throw lastError ?? new Error('Image edit failed after 3 attempts');
+
+  const latencyMs = performance.now() - start;
+  // calculateCost uses outputCostPer1k as cents per 1000 tokens; for image
+  // models we encode pricing as cost per 1000 images, so passing outputTokens=1000
+  // yields cost-per-image, and we multiply by image count.
+  const costCents = calculateCost(response.model, 0, 1000) * response.imageCount;
+
+  const db = getDb();
+  const [generation] = await db
+    .insert(generations)
+    .values({
+      userId: params.userId,
+      operation: params.operation,
+      promptName: params.promptName,
+      promptVersionId: params.promptVersionId,
+      model: response.model,
+      inputSnapshot: { prompt: params.prompt, size: params.size, quality: params.quality },
+      rawOutput: `<image bytes: ${response.pngBuffer.length}>`,
+      parsedOutput: { imageCount: response.imageCount, byteSize: response.pngBuffer.length },
+      latencyMs,
+      costCents,
+    })
+    .returning({ id: generations.id });
+
+  await checkRateLimitsAfterCall(params.userId, params.operation, costCents);
+
+  return {
+    pngBuffer: response.pngBuffer,
+    provenance: {
+      generationId: generation.id,
+      model: response.model,
+      promptName: params.promptName,
+      promptVersionId: params.promptVersionId,
+      latencyMs,
+      costCents,
+    },
+  };
+}

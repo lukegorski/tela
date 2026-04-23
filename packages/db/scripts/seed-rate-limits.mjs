@@ -36,6 +36,15 @@ const DEFAULTS = [
     perCallMaxCents: 10,
     description: 'profile.closetRead per-user defaults — limit how often users re-read',
   },
+  // Enhancement — gpt-image-1.5 at ~5¢/image, can retry once
+  {
+    userId: null,
+    capabilityName: 'enhancement.process',
+    dailyMaxCents: 1000, // $10/day per user — enough for ~200 enhancements (or 100 with retries)
+    dailyMaxCalls: 250,
+    perCallMaxCents: 15, // covers a single enhancement + retry
+    description: 'enhancement.process per-user defaults — generous for an initial wardrobe upload',
+  },
 ];
 
 async function main() {

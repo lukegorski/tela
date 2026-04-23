@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { getDb, itemPhotos } from '@tela/db';
 import { logEvent } from '@tela/events';
+import { getQueue, JOB_NAMES, type EnhancePhotoJob } from '@tela/queue';
 import { registerCapability } from '../registry.js';
 import { getRequestContext } from '../context/requestContext.js';
 import { getSupabaseAdmin, ITEM_PHOTOS_BUCKET } from '../storage/supabase.js';
@@ -52,7 +53,7 @@ export const confirmPhotoUpload = registerCapability({
       throw new Error('File not found in storage — confirm the upload completed first');
     }
 
-    // Create the item_photos row
+    // Create the item_photos row, marked pending so the worker picks it up
     const db = getDb();
     const [photo] = await db
       .insert(itemPhotos)
@@ -62,6 +63,7 @@ export const confirmPhotoUpload = registerCapability({
         width,
         height,
         capturedAt: capturedAt ? new Date(capturedAt) : null,
+        enhancementStatus: 'pending',
       })
       .returning({ id: itemPhotos.id, storagePath: itemPhotos.storagePath });
 
@@ -71,6 +73,21 @@ export const confirmPhotoUpload = registerCapability({
       source,
       payload: { photoId: photo.id, storagePath: photo.storagePath },
     });
+
+    // Enqueue async enhancement job. Don't fail the whole capability if the
+    // queue is unavailable — the photo is still usable, the worker can pick
+    // up pending rows on its next sweep.
+    try {
+      const queue = await getQueue();
+      const payload: EnhancePhotoJob = { photoId: photo.id, userId };
+      await queue.send(JOB_NAMES.ENHANCE_PHOTO, payload);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Logged but not thrown — enhancement is async and not strictly required
+      // for the upload confirmation to succeed.
+      // eslint-disable-next-line no-console
+      console.error('[confirmPhotoUpload] failed to enqueue enhancement:', msg);
+    }
 
     return {
       photoId: photo.id,

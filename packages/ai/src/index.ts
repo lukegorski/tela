@@ -1,4 +1,12 @@
-export { call, setProvider, initDefaultProvider, type GatewayCallParams } from './gateway.js';
+export {
+  call,
+  image,
+  setProvider,
+  initDefaultProvider,
+  type GatewayCallParams,
+  type GatewayImageParams,
+  type GatewayImageResult,
+} from './gateway.js';
 export type {
   AIProvider,
   AICallResult,
@@ -7,6 +15,8 @@ export type {
   ChatParams,
   ChatResponse,
   VisionParams,
+  ImageEditParams,
+  ImageResponse,
   ModelPricing,
 } from './types.js';
 export { OpenAIProvider } from './providers/openai.js';

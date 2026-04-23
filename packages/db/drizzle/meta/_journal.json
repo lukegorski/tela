@@ -29,6 +29,13 @@
       "when": 1776980668691,
       "tag": "0003_red_lake",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776982175316,
+      "tag": "0004_fantastic_frightful_four",
+      "breakpoints": true
     }
   ]
 }

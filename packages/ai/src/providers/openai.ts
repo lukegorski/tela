@@ -1,5 +1,12 @@
 import OpenAI from 'openai';
-import type { AIProvider, ChatParams, ChatResponse, VisionParams } from '../types.js';
+import type {
+  AIProvider,
+  ChatParams,
+  ChatResponse,
+  VisionParams,
+  ImageEditParams,
+  ImageResponse,
+} from '../types.js';
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI;
@@ -60,5 +67,48 @@ export class OpenAIProvider implements AIProvider {
       },
       model: response.model,
     };
+  }
+
+  async imageEdit(params: ImageEditParams): Promise<ImageResponse> {
+    // Uses the OpenAI Responses API with image_generation tool — matches the
+    // current production app's enhance flow.
+    // Cast to `unknown as never` because the OpenAI SDK's responses.create
+    // types lag behind the actual API surface.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const response = await (this.client as any).responses.create({
+      model: params.model,
+      input: [
+        {
+          role: 'user',
+          content: [
+            { type: 'input_image', image_url: params.sourceImageDataUrl, detail: 'auto' },
+            { type: 'input_text', text: params.prompt },
+          ],
+        },
+      ],
+      tools: [
+        {
+          type: 'image_generation',
+          model: params.imageModel,
+          action: 'edit',
+          quality: params.quality ?? 'medium',
+          size: params.size,
+          input_fidelity: params.inputFidelity ?? 'high',
+        },
+      ],
+    });
+
+    let pngBuffer: Buffer | null = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const item of response.output as any[]) {
+      if (item.type === 'image_generation_call' && item.result) {
+        pngBuffer = Buffer.from(item.result, 'base64');
+        break;
+      }
+    }
+    if (!pngBuffer) {
+      throw new Error('No image returned by image_generation tool');
+    }
+    return { pngBuffer, imageCount: 1, model: params.imageModel };
   }
 }

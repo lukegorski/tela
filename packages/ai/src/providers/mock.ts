@@ -1,4 +1,11 @@
-import type { AIProvider, ChatParams, ChatResponse, VisionParams } from '../types.js';
+import type {
+  AIProvider,
+  ChatParams,
+  ChatResponse,
+  VisionParams,
+  ImageEditParams,
+  ImageResponse,
+} from '../types.js';
 
 type MockHandler = (params: ChatParams | VisionParams) => ChatResponse;
 
@@ -50,5 +57,15 @@ export class MockProvider implements AIProvider {
   reset(): void {
     this.calls = [];
     this.handlers.clear();
+  }
+
+  async imageEdit(params: ImageEditParams): Promise<ImageResponse> {
+    this.calls.push({ method: 'imageEdit', params: params as unknown as ChatParams });
+    // Return a 1x1 transparent PNG so callers can exercise the pipeline in tests
+    const transparent = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVQYV2P4DwABAQEAWk1v8QAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    return { pngBuffer: transparent, imageCount: 1, model: params.imageModel };
   }
 }

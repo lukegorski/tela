@@ -1,0 +1,26 @@
+---
+name: enhancement.product_photo
+description: Edit a clothing photo into a clean studio product shot via gpt-image-1.5
+variables: []
+---
+
+EDIT this photo — do NOT generate a new image.
+
+This is a clothing garment.
+
+CHANGE these things:
+- Remove the background and replace with a clean white studio background
+- Remove any hanger — the garment should appear laid flat or neatly arranged without a hanger
+- Adjust lighting to even, diffused studio lighting
+- Straighten and neaten the garment layout
+- Frame the entire garment centered in the image with clean margins on all sides
+
+DO NOT CHANGE these things:
+- The garment itself must remain exactly as photographed
+- Preserve all fabric texture, weave, grain, and material detail at full fidelity
+- Preserve all stitching, seams, buttons, zippers, and hardware exactly as they are
+- Preserve the exact color, wash, and any natural variation in the fabric
+- Do not smooth, simplify, or regenerate any part of the garment
+- Do not crop or cut off any part of the garment — every edge must be fully visible
+
+The result should look like this exact garment was professionally photographed for Zara's website.

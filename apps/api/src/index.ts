@@ -16,6 +16,7 @@ import { createContext } from './trpc/context.js';
 import { mountCostDashboard } from './admin/costs.js';
 import { closeDb } from '@tela/db';
 import { setObservabilityHooks } from '@tela/capabilities';
+import { startInProcessWorker } from './worker.js';
 
 // Initialize Sentry (no-ops if DSN not set)
 initSentry();
@@ -96,6 +97,10 @@ const server = serve(
     logger.info({ port: info.port }, 'tela API server started');
   },
 );
+
+// Start the in-process worker (pulls enhancement jobs from pg-boss).
+// Don't await — the worker boots async; the HTTP server is the critical path.
+void startInProcessWorker();
 
 // Graceful shutdown
 async function shutdown(signal: string) {

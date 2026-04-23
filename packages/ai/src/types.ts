@@ -40,6 +40,34 @@ export interface AICallProvenance {
 export interface AIProvider {
   chat(params: ChatParams): Promise<ChatResponse>;
   chatWithVision(params: VisionParams): Promise<ChatResponse>;
+  /** Optional — providers without image support throw on call */
+  imageEdit?(params: ImageEditParams): Promise<ImageResponse>;
+}
+
+export interface ImageEditParams {
+  /** The orchestration model (gpt-5.4 — selects/calls the image tool) */
+  model: string;
+  /** The image generation tool model (gpt-image-1.5) */
+  imageModel: string;
+  /** Source image as data URL (data:image/jpeg;base64,...) */
+  sourceImageDataUrl: string;
+  /** Edit prompt */
+  prompt: string;
+  /** Output dimensions, e.g. "1024x1536" */
+  size: string;
+  /** "low" | "medium" | "high" — gpt-image-1.5 quality tier */
+  quality?: 'low' | 'medium' | 'high';
+  /** "auto" | "low" | "high" — input fidelity, controls how much of the original is preserved */
+  inputFidelity?: 'auto' | 'low' | 'high';
+}
+
+export interface ImageResponse {
+  /** PNG bytes returned by the model */
+  pngBuffer: Buffer;
+  /** Reported number of images generated (usually 1) */
+  imageCount: number;
+  /** The model the provider actually used */
+  model: string;
 }
 
 export interface ChatParams {

@@ -31,6 +31,23 @@ export const itemPhotos = pgTable('item_photos', {
   width: integer('width'),
   height: integer('height'),
   capturedAt: timestamp('captured_at', { withTimezone: true }),
+  /**
+   * Enhancement pipeline state for the original-uploaded photo.
+   * 'pending'    — queued, not yet picked up by worker
+   * 'processing' — worker is running gpt-image-1.5
+   * 'complete'   — enhanced photo exists at <storagePath>.enhanced.jpg
+   *                and background_color/enhanced_storage_path are populated below
+   * 'failed'     — gave up after retries; original is still usable as fallback
+   * 'skipped'    — not eligible for enhancement (e.g., this row IS the enhanced version)
+   * NULL         — legacy / not applicable
+   */
+  enhancementStatus: varchar('enhancement_status', { length: 20 }),
+  enhancementError: varchar('enhancement_error', { length: 500 }),
+  enhancementAttempts: integer('enhancement_attempts').notNull().default(0),
+  enhancedStoragePath: varchar('enhanced_storage_path', { length: 1024 }),
+  /** Detected background color from the enhanced image, e.g. "#f5f5f5" — for UI cards */
+  backgroundColor: varchar('background_color', { length: 7 }),
+  enhancedAt: timestamp('enhanced_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

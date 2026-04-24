@@ -8,7 +8,9 @@ import type {
   ImageResponse,
   MultiTurnParams,
   MultiTurnResponse,
+  MultiTurnStreamParams,
   ChatMessage,
+  StreamEvent,
 } from '../types.js';
 
 export class OpenAIProvider implements AIProvider {
@@ -162,6 +164,86 @@ export class OpenAIProvider implements AIProvider {
       },
       model: response.model,
       finishReason: choice.finish_reason ?? 'unknown',
+    };
+  }
+
+  async *chatMultiStream(
+    params: MultiTurnStreamParams,
+  ): AsyncGenerator<StreamEvent, void, unknown> {
+    // Map our messages to OpenAI's format. Streaming variant intentionally
+    // doesn't take tools — the chat capability handles tool dispatch
+    // synchronously and only streams the final text round.
+    const openaiMessages: OpenAI.ChatCompletionMessageParam[] = params.messages.map((m) => {
+      switch (m.role) {
+        case 'system':
+          return { role: 'system', content: m.content ?? '' };
+        case 'user':
+          return { role: 'user', content: m.content ?? '' };
+        case 'assistant': {
+          const msg: OpenAI.ChatCompletionAssistantMessageParam = {
+            role: 'assistant',
+            content: m.content,
+          };
+          if (m.toolCalls && m.toolCalls.length > 0) {
+            msg.tool_calls = m.toolCalls.map((tc) => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: { name: tc.name, arguments: JSON.stringify(tc.args) },
+            }));
+          }
+          return msg;
+        }
+        case 'tool':
+          if (!m.toolCallId) {
+            throw new Error('Tool message missing toolCallId — cannot map to OpenAI format');
+          }
+          return { role: 'tool', tool_call_id: m.toolCallId, content: m.content ?? '' };
+      }
+    });
+
+    const stream = await this.client.chat.completions.create({
+      model: params.model,
+      messages: openaiMessages,
+      temperature: params.temperature ?? 0.7,
+      max_tokens: params.maxTokens,
+      stream: true,
+      stream_options: { include_usage: true },
+    });
+
+    let fullContent = '';
+    let model = params.model;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let finishReason = 'unknown';
+
+    for await (const chunk of stream) {
+      // The final chunk includes usage when stream_options.include_usage is on.
+      if (chunk.usage) {
+        inputTokens = chunk.usage.prompt_tokens ?? 0;
+        outputTokens = chunk.usage.completion_tokens ?? 0;
+      }
+      if (chunk.model) model = chunk.model;
+
+      const choice = chunk.choices[0];
+      if (!choice) continue;
+
+      if (choice.finish_reason) {
+        finishReason = choice.finish_reason;
+      }
+
+      const delta = choice.delta?.content;
+      if (delta) {
+        fullContent += delta;
+        yield { type: 'text-delta', content: delta };
+      }
+    }
+
+    yield {
+      type: 'done',
+      message: { role: 'assistant', content: fullContent },
+      usage: { inputTokens, outputTokens },
+      model,
+      finishReason,
     };
   }
 

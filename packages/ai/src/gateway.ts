@@ -7,6 +7,7 @@ import type {
   ChatMessage,
   ToolDef,
   MultiTurnResponse,
+  StreamEvent,
 } from './types.js';
 import { calculateCost } from './pricing.js';
 import { OpenAIProvider } from './providers/openai.js';
@@ -271,6 +272,104 @@ export async function callMulti(params: GatewayMultiTurnParams): Promise<Gateway
       latencyMs,
       costCents,
     },
+  };
+}
+
+// ─── Streaming variant (Phase 9.2) ───
+
+export interface GatewayStreamParams {
+  operation: string;
+  userId: string;
+  promptName: string;
+  promptVersionId: string;
+  messages: ChatMessage[];
+  model: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+/**
+ * Streaming chat call. Yields text deltas as they arrive from the provider.
+ * Final yielded event is `done` with the fully assembled message + usage.
+ *
+ * Provenance is logged after the stream completes (we need the final
+ * content + token counts). Pre-call rate limit check still happens up
+ * front; the post-call cost check runs after the stream ends.
+ *
+ * The caller is responsible for emitting the provenance back to the
+ * client (or persisting it on a chat_messages row) — we yield a synthetic
+ * `done` event with `generationId` attached at the end via this generator's
+ * return value.
+ */
+export async function* callMultiStream(
+  params: GatewayStreamParams,
+): AsyncGenerator<StreamEvent, AICallProvenance, unknown> {
+  await checkRateLimitsBeforeCall(params.userId, params.operation);
+
+  const provider = getProvider();
+  if (!provider.chatMultiStream) {
+    throw new Error('Configured AI provider does not support streaming');
+  }
+
+  const start = performance.now();
+  let finalMessage: ChatMessage | null = null;
+  let usage = { inputTokens: 0, outputTokens: 0 };
+  let model = params.model;
+  let finishReason = 'unknown';
+
+  for await (const event of provider.chatMultiStream({
+    model: params.model,
+    messages: params.messages,
+    temperature: params.temperature,
+    maxTokens: params.maxTokens,
+  })) {
+    if (event.type === 'done') {
+      finalMessage = event.message;
+      usage = event.usage;
+      model = event.model;
+      finishReason = event.finishReason;
+      // Don't forward `done` to the consumer — the caller decides when to
+      // declare a turn complete (multi-round tool dispatch makes "done"
+      // ambiguous at this layer).
+      break;
+    }
+    yield event;
+  }
+
+  if (!finalMessage) {
+    throw new Error('Streaming call ended without a done event');
+  }
+
+  const latencyMs = performance.now() - start;
+  const costCents = calculateCost(model, usage.inputTokens, usage.outputTokens);
+
+  // Log to generations table for parity with non-streaming call().
+  const db = getDb();
+  const [generation] = await db
+    .insert(generations)
+    .values({
+      userId: params.userId,
+      operation: params.operation,
+      promptName: params.promptName,
+      promptVersionId: params.promptVersionId,
+      model,
+      inputSnapshot: { messages: params.messages, temperature: params.temperature },
+      rawOutput: finalMessage.content ?? '',
+      parsedOutput: { content: finalMessage.content, finishReason, streamed: true },
+      latencyMs,
+      costCents,
+    })
+    .returning({ id: generations.id });
+
+  await checkRateLimitsAfterCall(params.userId, params.operation, costCents);
+
+  return {
+    generationId: generation.id,
+    model,
+    promptName: params.promptName,
+    promptVersionId: params.promptVersionId,
+    latencyMs,
+    costCents,
   };
 }
 

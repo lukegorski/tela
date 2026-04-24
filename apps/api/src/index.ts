@@ -14,6 +14,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { appRouter } from './trpc/router.js';
 import { createContext } from './trpc/context.js';
 import { mountCostDashboard } from './admin/costs.js';
+import { mountChatStream } from './chatStream.js';
 import { closeDb } from '@tela/db';
 import { setObservabilityHooks } from '@tela/capabilities';
 import { startInProcessWorker } from './worker.js';
@@ -74,6 +75,10 @@ app.get('/health', (c) => {
 
 // Read-only admin cost dashboard (HTML + JSON), service-account auth required
 mountCostDashboard(app);
+
+// SSE endpoint for streaming chat (Phase 9.2). Bearer-token auth, separate
+// from tRPC because tRPC mutations don't natively stream.
+mountChatStream(app);
 
 // Mount tRPC
 app.use(

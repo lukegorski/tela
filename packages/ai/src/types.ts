@@ -46,6 +46,12 @@ export interface AIProvider {
    * tool support throw on call.
    */
   chatMulti?(params: MultiTurnParams): Promise<MultiTurnResponse>;
+  /**
+   * Streaming variant for the final text round. Yields text deltas as they
+   * arrive, terminating with a single 'done' event holding the full
+   * message + usage. Optional.
+   */
+  chatMultiStream?(params: MultiTurnStreamParams): AsyncGenerator<StreamEvent, void, unknown>;
   /** Optional — providers without image support throw on call */
   imageEdit?(params: ImageEditParams): Promise<ImageResponse>;
 }
@@ -159,6 +165,47 @@ export interface MultiTurnResponse {
   model: string;
   /** OpenAI's stop reason: 'stop' (text), 'tool_calls', 'length', etc. */
   finishReason: string;
+}
+
+// ─── Streaming (Phase 9.2) ───
+
+/**
+ * One event emitted by the streaming chat call. The chat capability + the
+ * SSE endpoint forward these to the client; the client uses them to update
+ * the UI incrementally.
+ *
+ * Tool-call related events do NOT come from the model's stream directly —
+ * the chat capability emits them around the synchronous tool dispatch
+ * between streaming text rounds. The model's streaming output is purely
+ * text deltas (`text-delta` events) plus a terminal `done`.
+ */
+export type StreamEvent =
+  | {
+      type: 'text-delta';
+      /** A token (or small group of tokens) appended to the current assistant message. */
+      content: string;
+    }
+  | {
+      type: 'done';
+      /** The fully assembled assistant message. */
+      message: ChatMessage;
+      usage: { inputTokens: number; outputTokens: number };
+      model: string;
+      finishReason: string;
+    };
+
+/**
+ * Like MultiTurnParams but without `tools` — the streaming variant is
+ * intended for the FINAL text round of a chat turn, after the synchronous
+ * tool dispatch is done. Tool-calling within the stream itself adds enough
+ * complexity (deltas of arguments, partial tool invocations) that we keep
+ * it out of the MVP.
+ */
+export interface MultiTurnStreamParams {
+  model: string;
+  messages: ChatMessage[];
+  temperature?: number;
+  maxTokens?: number;
 }
 
 /**

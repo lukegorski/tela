@@ -19,6 +19,13 @@ export {
   AdminRequiredError,
 } from './registry.js';
 
+// Re-export streaming chat helpers (used by the SSE endpoint, not via tRPC)
+export {
+  streamChatTurn,
+  type ChatStreamEvent,
+  type StreamChatInput,
+} from './chat/index.js';
+
 // Re-export types
 export type { Capability, RegisteredCapability } from './types.js';
 

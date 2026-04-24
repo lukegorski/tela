@@ -5,3 +5,7 @@
 // (e.g., admin.listRules, admin.updateRule, admin.getCosts).
 
 export { getDashboardStats } from './getDashboardStats.js';
+export { listRules } from './listRules.js';
+export { createRule } from './createRule.js';
+export { updateRule } from './updateRule.js';
+export { deleteRule } from './deleteRule.js';

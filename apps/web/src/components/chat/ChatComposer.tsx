@@ -4,11 +4,19 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/trpc/client';
 
+interface ToolInvocation {
+  name: string;
+  args: unknown;
+  ok: boolean;
+  error: string | null;
+}
+
 interface Message {
   id: string;
   role: string;
   content: string;
   createdAt: string;
+  toolInvocations?: ToolInvocation[] | null;
 }
 
 interface Props {
@@ -57,6 +65,7 @@ export function ChatComposer({ conversationId, initialMessages, lang }: Props) {
         userMessageId: string;
         assistantMessageId: string;
         assistantContent: string;
+        toolInvocations?: ToolInvocation[];
       };
 
       setActiveConvoId(result.conversationId);
@@ -75,6 +84,7 @@ export function ChatComposer({ conversationId, initialMessages, lang }: Props) {
           role: 'assistant',
           content: result.assistantContent,
           createdAt: new Date().toISOString(),
+          toolInvocations: result.toolInvocations ?? null,
         },
       ]);
 
@@ -109,12 +119,15 @@ export function ChatComposer({ conversationId, initialMessages, lang }: Props) {
           </div>
         ) : (
           messages.map((m) => (
-            <MessageBubble key={m.id} role={m.role} content={m.content} />
+            <MessageBubble
+              key={m.id}
+              role={m.role}
+              content={m.content}
+              toolInvocations={m.toolInvocations ?? null}
+            />
           ))
         )}
-        {sendMessage.isPending && (
-          <MessageBubble role="assistant" content="…" />
-        )}
+        {sendMessage.isPending && <MessageBubble role="assistant" content="…" toolInvocations={null} />}
       </div>
 
       {/* Composer */}
@@ -147,7 +160,73 @@ export function ChatComposer({ conversationId, initialMessages, lang }: Props) {
   );
 }
 
-function MessageBubble({ role, content }: { role: string; content: string }) {
+/**
+ * Friendly description of what a tool call did. Tries to surface enough
+ * detail that the user understands the action without dumping raw JSON.
+ * Falls back to the capability name when we don't have a special case.
+ */
+function describeToolCall(inv: ToolInvocation): string {
+  switch (inv.name) {
+    case 'wardrobe.listItems':
+      return 'Looked through your wardrobe';
+    case 'wardrobe.getItem':
+      return 'Looked at a specific piece';
+    case 'wardrobe.removeItem':
+      return 'Removed an item from your closet';
+    case 'outfit.generate':
+      return 'Generated outfit suggestions';
+    case 'outfit.list':
+      return 'Looked at your outfit history';
+    case 'outfit.get':
+      return 'Looked at an outfit in detail';
+    case 'outfit.save':
+      return 'Saved an outfit to your lookbook';
+    case 'outfit.delete':
+      return 'Deleted an outfit';
+    case 'profile.get':
+      return 'Reviewed your style profile';
+    case 'profile.closetRead':
+      return 'Refreshed your style profile';
+    case 'context.assemble':
+      return 'Checked the time / season / occasion';
+    default:
+      return inv.name;
+  }
+}
+
+function ToolInvocationList({ invocations }: { invocations: ToolInvocation[] }) {
+  if (invocations.length === 0) return null;
+  return (
+    <ul className="mt-2 space-y-0.5">
+      {invocations.map((inv, i) => (
+        <li
+          key={i}
+          className={`text-[11px] flex items-center gap-1.5 ${
+            inv.ok ? 'text-stone-400' : 'text-red-500'
+          }`}
+        >
+          <span aria-hidden="true">{inv.ok ? '✓' : '!'}</span>
+          <span>{describeToolCall(inv)}</span>
+          {!inv.ok && inv.error && (
+            <span className="text-red-400 italic" title={inv.error}>
+              ({inv.error})
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function MessageBubble({
+  role,
+  content,
+  toolInvocations,
+}: {
+  role: string;
+  content: string;
+  toolInvocations: ToolInvocation[] | null;
+}) {
   const isUser = role === 'user';
   const isSystem = role === 'system';
 
@@ -169,6 +248,9 @@ function MessageBubble({ role, content }: { role: string; content: string }) {
         }`}
       >
         {content}
+        {!isUser && toolInvocations && toolInvocations.length > 0 && (
+          <ToolInvocationList invocations={toolInvocations} />
+        )}
       </div>
     </div>
   );

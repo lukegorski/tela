@@ -38,6 +38,7 @@ const output = z.object({
  */
 export const getItem = registerCapability({
   name: 'wardrobe.getItem',
+  chatTool: true,
   description: "Fetch a single closet item by ID. Returns null if the item doesn't belong to the user.",
   input,
   output,

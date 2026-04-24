@@ -17,6 +17,7 @@ const output = z.object({
 
 export const saveOutfit = registerCapability({
   name: 'outfit.save',
+  chatTool: true,
   description: "Mark an outfit as saved (or unsaved) in the user's lookbook.",
   input,
   output,

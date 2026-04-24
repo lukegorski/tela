@@ -52,6 +52,7 @@ const output = z.object({
  */
 export const closetRead = registerCapability({
   name: 'profile.closetRead',
+  chatTool: true,
   description:
     "Generate or refresh a user's style profile by analyzing their entire wardrobe. Produces both a rich prose description (the closet read) and 5-axis numerical dimensions (minimalMaximal, classicTrendy, casualFormal, subtleBold, structuredFluid).",
   input,

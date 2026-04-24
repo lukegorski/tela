@@ -28,6 +28,7 @@ const output = z.object({
 
 export const getOutfit = registerCapability({
   name: 'outfit.get',
+  chatTool: true,
   description: "Fetch a single outfit by ID, including its items, scoped to the requesting user.",
   input,
   output,

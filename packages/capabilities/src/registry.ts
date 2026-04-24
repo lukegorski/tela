@@ -38,6 +38,7 @@ export function registerCapability<TInput extends z.ZodType, TOutput extends z.Z
   }
 
   const requiresAdmin = capability.requiresAdmin === true;
+  const chatTool = capability.chatTool === true;
 
   registry.set(capability.name, {
     name: capability.name,
@@ -45,6 +46,7 @@ export function registerCapability<TInput extends z.ZodType, TOutput extends z.Z
     inputSchema: capability.input,
     outputSchema: capability.output,
     requiresAdmin,
+    chatTool,
     execute: async (rawInput: unknown) => {
       const hooks = getObservabilityHooks();
       const start = performance.now();

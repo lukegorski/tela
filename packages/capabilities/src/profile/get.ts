@@ -38,6 +38,7 @@ const output = z.object({
  */
 export const getProfile = registerCapability({
   name: 'profile.get',
+  chatTool: true,
   description:
     "Fetch the user's current style profile, including the prose closet read, 5-axis numerical dimensions, and learned signals.",
   input,

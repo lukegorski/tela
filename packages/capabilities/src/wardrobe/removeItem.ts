@@ -19,6 +19,7 @@ const output = z.object({
  */
 export const removeItem = registerCapability({
   name: 'wardrobe.removeItem',
+  chatTool: true,
   description: "Remove a closet item from the user's closet. The underlying photo file is preserved for now.",
   input,
   output,

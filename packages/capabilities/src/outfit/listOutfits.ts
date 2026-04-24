@@ -26,6 +26,7 @@ const output = z.object({
 
 export const listOutfits = registerCapability({
   name: 'outfit.list',
+  chatTool: true,
   description:
     "List a user's outfits, optionally filtering to saved-only. Returns lightweight summaries — call outfit.get for items + full detail.",
   input,

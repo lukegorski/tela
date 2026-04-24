@@ -40,6 +40,12 @@ export interface AICallProvenance {
 export interface AIProvider {
   chat(params: ChatParams): Promise<ChatResponse>;
   chatWithVision(params: VisionParams): Promise<ChatResponse>;
+  /**
+   * Multi-turn chat with optional tool definitions. Used by the chat
+   * capability to support function-calling. Optional — providers without
+   * tool support throw on call.
+   */
+  chatMulti?(params: MultiTurnParams): Promise<MultiTurnResponse>;
   /** Optional — providers without image support throw on call */
   imageEdit?(params: ImageEditParams): Promise<ImageResponse>;
 }
@@ -90,6 +96,69 @@ export interface ChatResponse {
     outputTokens: number;
   };
   model: string;
+}
+
+// ─── Multi-turn + tool calling (Phase 9.1) ───
+
+/**
+ * One message in a multi-turn dialogue. Mirrors OpenAI's chat completion
+ * message shape but provider-agnostic.
+ *
+ * - `role: 'system'` / `'user'` / `'assistant'` — text turns
+ * - `role: 'tool'` — the result of executing a tool the assistant requested.
+ *   Must reference the tool_call_id from the assistant message.
+ * - An assistant message may have `content: null` if it's only emitting
+ *   tool_calls.
+ */
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | null;
+  toolCallId?: string;
+  toolCalls?: ToolCall[];
+}
+
+/**
+ * A single tool invocation requested by the assistant. We normalize the
+ * argument payload to a parsed object — providers that return raw JSON
+ * strings get parsed at the boundary.
+ */
+export interface ToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+/**
+ * A tool the assistant is allowed to call. `parameters` is a JSON Schema
+ * describing the input shape — typically derived from the corresponding
+ * capability's Zod input schema.
+ */
+export interface ToolDef {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+export interface MultiTurnParams {
+  model: string;
+  messages: ChatMessage[];
+  tools?: ToolDef[];
+  /** When tools are present, force the model to either pick one ("auto") or skip tools entirely ("none"). Default 'auto'. */
+  toolChoice?: 'auto' | 'none' | 'required';
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface MultiTurnResponse {
+  /** The assistant message returned by the model. May contain tool_calls and/or content. */
+  message: ChatMessage;
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+  };
+  model: string;
+  /** OpenAI's stop reason: 'stop' (text), 'tool_calls', 'length', etc. */
+  finishReason: string;
 }
 
 /**

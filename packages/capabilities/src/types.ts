@@ -34,6 +34,16 @@ export interface Capability<
    */
   requiresAdmin?: boolean;
 
+  /**
+   * If true, this capability is exposed to the chat AI as a tool. Opt-in
+   * because not every capability makes sense for the chat to invoke
+   * autonomously (e.g., multi-step photo upload, internal pipelines, admin
+   * mutations). The tool name is the capability name; the description is
+   * the capability description; the JSON schema is derived from the input
+   * Zod schema. Default: false.
+   */
+  chatTool?: boolean;
+
   /** The business logic. Receives validated input, returns validated output. */
   execute: (input: z.infer<TInput>) => Promise<z.infer<TOutput>>;
 }
@@ -48,5 +58,7 @@ export interface RegisteredCapability {
   outputSchema: z.ZodType;
   /** True if this capability is gated to admin RequestContexts only. */
   requiresAdmin: boolean;
+  /** True if this capability is exposed to the chat AI as a tool. */
+  chatTool: boolean;
   execute: (input: unknown) => Promise<unknown>;
 }

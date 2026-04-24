@@ -54,6 +54,7 @@ const output = z.object({
  */
 export const assembleContext = registerCapability({
   name: 'context.assemble',
+  chatTool: true,
   description:
     "Assemble a context snapshot capturing time of day, season, occasion, optional weather, and optional calendar context. Used as input to outfit.generate.",
   input,

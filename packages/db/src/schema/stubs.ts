@@ -28,11 +28,24 @@ export const chatConversations = pgTable(
   (table) => [index('chat_conversations_user_id_idx').on(table.userId)],
 );
 
+/**
+ * One tool invocation made by the assistant during a chat turn.
+ *
+ * Stored as jsonb on chat_messages.tool_calls when role='assistant'. Captures
+ * enough to render the activity in the UI ("generated 3 outfits", "looked
+ * up the floral capris") and to debug failed turns. The full tool result
+ * payload is NOT stored here — it lives in the generations row referenced
+ * by the message's generationId, which keeps chat_messages light.
+ */
 export interface ChatToolCall {
-  name: string; // capability name e.g. 'wardrobe.listItems'
-  arguments: Record<string, unknown>;
-  /** JSON-stringified result, or null if not yet executed */
-  result: unknown | null;
+  /** Capability name, e.g. 'outfit.generate' */
+  name: string;
+  /** Raw arguments the model passed (unknown until validated by the capability) */
+  args: unknown;
+  /** True if the capability returned successfully; false if it threw */
+  ok: boolean;
+  /** Error message when ok=false; null otherwise */
+  error: string | null;
 }
 
 export const chatMessages = pgTable(

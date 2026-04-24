@@ -12,11 +12,19 @@ function getSql() {
   return _sql;
 }
 
+export interface ChatToolInvocation {
+  name: string;
+  args: unknown;
+  ok: boolean;
+  error: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: string;
   content: string;
   createdAt: string;
+  toolInvocations: ChatToolInvocation[] | null;
 }
 
 export interface ChatConversation {
@@ -52,9 +60,15 @@ export async function getLatestConversation(userId: string): Promise<ChatConvers
 
   const c = convos[0];
   const messages = await sql<
-    { id: string; role: string; content: string; created_at: Date }[]
+    {
+      id: string;
+      role: string;
+      content: string;
+      tool_calls: ChatToolInvocation[] | null;
+      created_at: Date;
+    }[]
   >`
-    SELECT id, role, content, created_at
+    SELECT id, role, content, tool_calls, created_at
     FROM chat_messages
     WHERE conversation_id = ${c.id}
     ORDER BY created_at ASC
@@ -69,6 +83,7 @@ export async function getLatestConversation(userId: string): Promise<ChatConvers
       id: m.id,
       role: m.role,
       content: m.content,
+      toolInvocations: m.tool_calls,
       createdAt: m.created_at.toISOString(),
     })),
   };

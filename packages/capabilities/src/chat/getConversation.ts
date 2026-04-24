@@ -8,11 +8,19 @@ const input = z.object({
   conversationId: z.string().uuid(),
 });
 
+const toolInvocation = z.object({
+  name: z.string(),
+  args: z.unknown(),
+  ok: z.boolean(),
+  error: z.string().nullable(),
+});
+
 const messageSchema = z.object({
   id: z.string().uuid(),
   role: z.string(),
   content: z.string(),
   createdAt: z.string(),
+  toolInvocations: z.array(toolInvocation).nullable(),
 });
 
 const output = z.object({
@@ -43,6 +51,7 @@ export const getConversation = registerCapability({
         id: chatMessages.id,
         role: chatMessages.role,
         content: chatMessages.content,
+        toolCalls: chatMessages.toolCalls,
         createdAt: chatMessages.createdAt,
       })
       .from(chatMessages)
@@ -58,6 +67,14 @@ export const getConversation = registerCapability({
         id: m.id,
         role: m.role,
         content: m.content,
+        toolInvocations: m.toolCalls
+          ? m.toolCalls.map((tc) => ({
+              name: tc.name,
+              args: tc.args,
+              ok: tc.ok,
+              error: tc.error,
+            }))
+          : null,
         createdAt: m.createdAt.toISOString(),
       })),
     };

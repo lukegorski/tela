@@ -33,6 +33,7 @@ const output = z.object({
  */
 export const listItems = registerCapability({
   name: 'wardrobe.listItems',
+  chatTool: true,
   description: "List items in a user's closet. Supports filtering by category and pagination via limit/offset. Returns lightweight summaries — use wardrobe.getItem for full detail.",
   input,
   output,

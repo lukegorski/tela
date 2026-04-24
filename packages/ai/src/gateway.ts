@@ -1,5 +1,13 @@
 import { getDb, generations } from '@tela/db';
-import type { AIProvider, ChatParams, AICallResult, AICallProvenance } from './types.js';
+import type {
+  AIProvider,
+  ChatParams,
+  AICallResult,
+  AICallProvenance,
+  ChatMessage,
+  ToolDef,
+  MultiTurnResponse,
+} from './types.js';
 import { calculateCost } from './pricing.js';
 import { OpenAIProvider } from './providers/openai.js';
 import { checkRateLimitsBeforeCall, checkRateLimitsAfterCall } from './rateLimits.js';
@@ -152,6 +160,118 @@ export async function call<T>(params: GatewayCallParams): Promise<AICallResult<T
   await checkRateLimitsAfterCall(params.userId, params.operation, costCents);
 
   return { data: parsedOutput, provenance };
+}
+
+// ─── Multi-turn + tools (Phase 9.1) ───
+
+export interface GatewayMultiTurnParams {
+  operation: string;
+  userId: string;
+  promptName: string;
+  promptVersionId: string;
+  /** Full message history including the system prompt, prior turns, and the new user turn. */
+  messages: ChatMessage[];
+  /** Optional tools the model is allowed to call. */
+  tools?: ToolDef[];
+  toolChoice?: 'auto' | 'none' | 'required';
+  model: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface GatewayMultiTurnResult {
+  response: MultiTurnResponse;
+  provenance: AICallProvenance;
+}
+
+/**
+ * Multi-turn chat call with optional tool support. Same provenance + rate
+ * limit + retry behavior as call(); always logs to the generations table.
+ *
+ * Each call here is one round-trip to the model. The chat capability calls
+ * this in a loop to handle recursive tool dispatch.
+ */
+export async function callMulti(params: GatewayMultiTurnParams): Promise<GatewayMultiTurnResult> {
+  await checkRateLimitsBeforeCall(params.userId, params.operation);
+
+  const provider = getProvider();
+  if (!provider.chatMulti) {
+    throw new Error('Configured AI provider does not support multi-turn / tool calls');
+  }
+
+  const start = performance.now();
+  let lastError: Error | null = null;
+  let response: MultiTurnResponse | undefined;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      response = await provider.chatMulti({
+        model: params.model,
+        messages: params.messages,
+        tools: params.tools,
+        toolChoice: params.toolChoice,
+        temperature: params.temperature,
+        maxTokens: params.maxTokens,
+      });
+      break;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < 3) {
+        await new Promise((r) => setTimeout(r, attempt * 1000));
+      }
+    }
+  }
+
+  if (!response) {
+    throw lastError ?? new Error('Multi-turn AI call failed after 3 attempts');
+  }
+
+  const latencyMs = performance.now() - start;
+  const costCents = calculateCost(
+    response.model,
+    response.usage.inputTokens,
+    response.usage.outputTokens,
+  );
+
+  // Provenance: persist the message log + tool definitions for replay/debug.
+  const db = getDb();
+  const [generation] = await db
+    .insert(generations)
+    .values({
+      userId: params.userId,
+      operation: params.operation,
+      promptName: params.promptName,
+      promptVersionId: params.promptVersionId,
+      model: response.model,
+      inputSnapshot: {
+        messages: params.messages,
+        tools: params.tools?.map((t) => ({ name: t.name, description: t.description })),
+        temperature: params.temperature,
+      },
+      rawOutput: JSON.stringify(response.message),
+      parsedOutput: {
+        content: response.message.content,
+        toolCalls: response.message.toolCalls,
+        finishReason: response.finishReason,
+      },
+      latencyMs,
+      costCents,
+    })
+    .returning({ id: generations.id });
+
+  await checkRateLimitsAfterCall(params.userId, params.operation, costCents);
+
+  return {
+    response,
+    provenance: {
+      generationId: generation.id,
+      model: response.model,
+      promptName: params.promptName,
+      promptVersionId: params.promptVersionId,
+      latencyMs,
+      costCents,
+    },
+  };
 }
 
 // ─── Image edit (gpt-image-1.5 etc.) ───

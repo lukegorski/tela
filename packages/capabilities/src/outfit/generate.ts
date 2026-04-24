@@ -58,6 +58,7 @@ const output = z.object({
 
 export const generateOutfits = registerCapability({
   name: 'outfit.generate',
+  chatTool: true,
   description:
     "Generate outfit suggestions for a user given a context. Uses the user's style profile, the styling rules, and their wardrobe. Deduplicates against previously-generated outfits via pairing keys.",
   input,

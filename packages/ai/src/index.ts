@@ -1,9 +1,12 @@
 export {
   call,
+  callMulti,
   image,
   setProvider,
   initDefaultProvider,
   type GatewayCallParams,
+  type GatewayMultiTurnParams,
+  type GatewayMultiTurnResult,
   type GatewayImageParams,
   type GatewayImageResult,
 } from './gateway.js';
@@ -18,6 +21,11 @@ export type {
   ImageEditParams,
   ImageResponse,
   ModelPricing,
+  ChatMessage,
+  ToolCall,
+  ToolDef,
+  MultiTurnParams,
+  MultiTurnResponse,
 } from './types.js';
 export { OpenAIProvider } from './providers/openai.js';
 export { MockProvider } from './providers/mock.js';

@@ -15,6 +15,7 @@ const output = z.object({
 
 export const deleteOutfit = registerCapability({
   name: 'outfit.delete',
+  chatTool: true,
   description: "Permanently delete an outfit. The outfit_items rows are also removed via cascade.",
   input,
   output,

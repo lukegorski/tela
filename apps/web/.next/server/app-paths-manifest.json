@@ -1,6 +1,8 @@
 {
   "/_global-error/page": "app/_global-error/page.js",
   "/_not-found/page": "app/_not-found/page.js",
+  "/auth/callback/route": "app/auth/callback/route.js",
+  "/auth/sign-out/route": "app/auth/sign-out/route.js",
   "/page": "app/page.js",
   "/sign-in/page": "app/sign-in/page.js",
   "/wardrobe/page": "app/wardrobe/page.js"

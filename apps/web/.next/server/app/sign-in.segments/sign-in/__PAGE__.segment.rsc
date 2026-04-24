@@ -1,5 +1,9 @@
 1:"$Sreact.fragment"
-2:I[12969,["/_next/static/chunks/0sjsdo_j~3~~-.js","/_next/static/chunks/0t6lncqb5rn8~.js"],"OutletBoundary"]
-3:"$Sreact.suspense"
-0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"style":{"padding":"4rem 2rem","maxWidth":480,"margin":"0 auto"},"children":[["$","h1",null,{"style":{"fontSize":"1.5rem","marginBottom":"0.5rem"},"children":"tela"}],["$","p",null,{"style":{"color":"#6b7280","marginBottom":"2rem"},"children":"Sign-in screen coming in Phase 8.2."}],["$","p",null,{"style":{"color":"#6b7280","fontSize":"0.875rem"},"children":"For now this app is being built. Check back soon."}]]}],null,["$","$L2",null,{"children":["$","$3",null,{"name":"Next.MetadataOutlet","children":"$@4"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"hQGFyEjaPXjW8bAnlfLhL"}
-4:null
+2:I[81228,["/_next/static/chunks/0sjsdo_j~3~~-.js","/_next/static/chunks/0_k_7f~34pj4y.js","/_next/static/chunks/0-.7_gxvvk180.js"],"ClientPageRoot"]
+3:I[41683,["/_next/static/chunks/0sjsdo_j~3~~-.js","/_next/static/chunks/0_k_7f~34pj4y.js","/_next/static/chunks/0-.7_gxvvk180.js","/_next/static/chunks/0r6mybgykjbp8.js"],"default"]
+6:I[12969,["/_next/static/chunks/0sjsdo_j~3~~-.js","/_next/static/chunks/0_k_7f~34pj4y.js","/_next/static/chunks/0-.7_gxvvk180.js"],"OutletBoundary"]
+7:"$Sreact.suspense"
+0:{"rsc":["$","$1","c",{"children":[["$","$L2",null,{"Component":"$3","serverProvidedParams":{"searchParams":{},"params":{},"promises":["$@4","$@5"]}}],[["$","script","script-0",{"src":"/_next/static/chunks/0r6mybgykjbp8.js","async":true}]],["$","$L6",null,{"children":["$","$7",null,{"name":"Next.MetadataOutlet","children":"$@8"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"j7yxIJinPfZPwNiyvjGAI"}
+4:{}
+5:"$0:rsc:props:children:0:props:serverProvidedParams:params"
+8:null

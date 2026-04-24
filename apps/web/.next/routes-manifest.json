@@ -42,6 +42,18 @@
       "namedRegex": "^/_not\\-found(?:/)?$"
     },
     {
+      "page": "/auth/callback",
+      "regex": "^/auth/callback(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/auth/callback(?:/)?$"
+    },
+    {
+      "page": "/auth/sign-out",
+      "regex": "^/auth/sign\\-out(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/auth/sign\\-out(?:/)?$"
+    },
+    {
       "page": "/sign-in",
       "regex": "^/sign\\-in(?:/)?$",
       "routeKeys": {},

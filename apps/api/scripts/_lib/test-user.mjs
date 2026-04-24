@@ -22,12 +22,15 @@ const API_BASE = process.env.API_BASE ?? 'http://localhost:3001';
 /**
  * Hit a tRPC endpoint with the given auth token.
  * Throws on non-OK responses.
+ *
+ * Server uses superjson — wire format wraps inputs and outputs as { json: ... }.
  */
 export async function trpcCall(procedure, input, authHeader) {
-  // All capability endpoints are mutations (POST). Only capability.list is a query.
   const isQuery = procedure === 'capability.list';
+  const wrappedInput = { json: input ?? {} };
+
   const url = isQuery
-    ? `${API_BASE}/trpc/${procedure}?input=${encodeURIComponent(JSON.stringify(input ?? {}))}`
+    ? `${API_BASE}/trpc/${procedure}?input=${encodeURIComponent(JSON.stringify(wrappedInput))}`
     : `${API_BASE}/trpc/${procedure}`;
 
   const res = await fetch(url, {
@@ -36,13 +39,14 @@ export async function trpcCall(procedure, input, authHeader) {
       'Content-Type': 'application/json',
       ...(authHeader ? { Authorization: authHeader } : {}),
     },
-    body: isQuery ? undefined : JSON.stringify(input ?? {}),
+    body: isQuery ? undefined : JSON.stringify(wrappedInput),
   });
   const data = await res.json();
   if (data.error) {
-    throw new Error(`${procedure}: ${data.error.message ?? JSON.stringify(data.error)}`);
+    const errPayload = data.error.json ?? data.error;
+    throw new Error(`${procedure}: ${errPayload.message ?? JSON.stringify(errPayload)}`);
   }
-  return data.result.data;
+  return data.result.data.json ?? data.result.data;
 }
 
 export async function createTestUser({ prefix = 'e2e' } = {}) {

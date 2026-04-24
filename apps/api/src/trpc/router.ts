@@ -1,5 +1,6 @@
 import { initTRPC, TRPCError, type AnyTRPCRouter } from '@trpc/server';
 import { z } from 'zod';
+import superjson from 'superjson';
 import {
   getAllCapabilities,
   runInContext,
@@ -7,7 +8,9 @@ import {
 } from '@tela/capabilities';
 import type { TRPCContext } from './context.js';
 
-const t = initTRPC.context<TRPCContext>().create();
+const t = initTRPC.context<TRPCContext>().create({
+  transformer: superjson,
+});
 
 /**
  * Public procedure — no auth required. Use sparingly.

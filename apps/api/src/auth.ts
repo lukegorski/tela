@@ -69,8 +69,8 @@ async function contextFromUserToken(token: string): Promise<RequestContext> {
   const sql = getSql();
 
   // Look up our users row; auto-create on first sign-in
-  let rows = await sql<{ id: string }[]>`
-    SELECT id FROM users WHERE auth_user_id = ${authUserId} LIMIT 1
+  let rows = await sql<{ id: string; is_admin: boolean }[]>`
+    SELECT id, is_admin FROM users WHERE auth_user_id = ${authUserId} LIMIT 1
   `;
 
   if (rows.length === 0) {
@@ -90,10 +90,10 @@ async function contextFromUserToken(token: string): Promise<RequestContext> {
       );
     }
 
-    const created = await sql<{ id: string }[]>`
+    const created = await sql<{ id: string; is_admin: boolean }[]>`
       INSERT INTO users (auth_user_id, email, phone, display_name, avatar_url)
       VALUES (${authUserId}, ${email}, ${phone}, ${displayName}, ${avatarUrl})
-      RETURNING id
+      RETURNING id, is_admin
     `;
     rows = created;
     logger.info(
@@ -105,6 +105,7 @@ async function contextFromUserToken(token: string): Promise<RequestContext> {
   return {
     userId: rows[0].id,
     source: 'web',
+    isAdmin: rows[0].is_admin,
   };
 }
 
@@ -154,6 +155,11 @@ function contextFromServiceToken(token: string): RequestContext {
     userId,
     source: source as RequestContext['source'],
     isServiceAccount: true,
+    // Service-account contexts are trusted at the auth layer (the secret is
+    // only held by Luke's machines + the deployed services), so they bypass
+    // the admin gate. Admin-only capabilities can still be invoked from MCP /
+    // workers / scripts when needed.
+    isAdmin: true,
   };
 }
 

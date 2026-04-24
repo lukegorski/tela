@@ -8,6 +8,7 @@ import './context/index.js';
 import './outfit/index.js';
 import './enhancement/index.js';
 import './chat/index.js';
+import './admin/index.js';
 
 // Re-export registry functions
 export {
@@ -15,6 +16,7 @@ export {
   getAllCapabilities,
   executeCapability,
   registerCapability,
+  AdminRequiredError,
 } from './registry.js';
 
 // Re-export types

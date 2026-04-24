@@ -15,6 +15,8 @@ const output = z.object({
   locale: z.string(),
   source: z.string(),
   isServiceAccount: z.boolean().optional(),
+  // Drives whether the navbar / mobile nav surfaces the /admin tab.
+  isAdmin: z.boolean(),
   // Onboarding state — drives whether the frontend routes to /onboarding
   onboardingComplete: z.boolean(),
   hasLocation: z.boolean(),
@@ -52,6 +54,7 @@ export const whoami = registerCapability({
       locale: user.locale,
       source,
       isServiceAccount,
+      isAdmin: user.isAdmin,
       onboardingComplete: user.onboardingComplete,
       hasLocation: user.location !== null,
     };

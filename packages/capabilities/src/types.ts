@@ -27,6 +27,13 @@ export interface Capability<
   /** Zod schema for output validation */
   output: TOutput;
 
+  /**
+   * If true, the registry rejects calls from non-admin RequestContexts with a
+   * thrown Error before the handler runs. Service-account contexts (MCP,
+   * workers, scripts) are treated as admin by the auth layer. Default: false.
+   */
+  requiresAdmin?: boolean;
+
   /** The business logic. Receives validated input, returns validated output. */
   execute: (input: z.infer<TInput>) => Promise<z.infer<TOutput>>;
 }
@@ -39,5 +46,7 @@ export interface RegisteredCapability {
   description: string;
   inputSchema: z.ZodType;
   outputSchema: z.ZodType;
+  /** True if this capability is gated to admin RequestContexts only. */
+  requiresAdmin: boolean;
   execute: (input: unknown) => Promise<unknown>;
 }

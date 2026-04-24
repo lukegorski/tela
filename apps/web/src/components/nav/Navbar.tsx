@@ -8,8 +8,11 @@ import { useDictionary } from '@/lib/i18n/DictionaryProvider';
 /**
  * Top navbar shown on desktop. Hidden on mobile (MobileNav takes over).
  * Simple horizontal nav: brand left, links + sign-out right.
+ *
+ * Admin link only renders for users with `users.is_admin = true`. The flag
+ * is computed in the [lang] layout so we don't roundtrip per page.
  */
-export function Navbar() {
+export function Navbar({ isAdmin = false }: { isAdmin?: boolean }) {
   const { lang, dict } = useDictionary();
   const pathname = usePathname();
 
@@ -54,6 +57,18 @@ export function Navbar() {
           >
             Settings
           </Link>
+          {isAdmin && (
+            <Link
+              href={localePath(lang, '/admin')}
+              className={`text-sm transition-colors ${
+                pathname.startsWith(localePath(lang, '/admin'))
+                  ? 'text-stone-900 font-medium'
+                  : 'text-stone-500 hover:text-stone-900'
+              }`}
+            >
+              Admin
+            </Link>
+          )}
         </nav>
       </div>
     </header>

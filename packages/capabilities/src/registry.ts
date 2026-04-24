@@ -1,12 +1,30 @@
 import type { z } from 'zod';
 import type { Capability, RegisteredCapability } from './types.js';
 import { buildEventBase, getObservabilityHooks } from './observability.js';
+import { tryGetRequestContext } from './context/requestContext.js';
 
 const registry = new Map<string, RegisteredCapability>();
 
 /**
+ * Thrown when a non-admin RequestContext attempts to call an
+ * `requiresAdmin: true` capability. The tRPC layer surfaces this as a
+ * FORBIDDEN error.
+ */
+export class AdminRequiredError extends Error {
+  readonly code = 'ADMIN_REQUIRED' as const;
+  constructor(capabilityName: string) {
+    super(
+      `Capability "${capabilityName}" requires admin privileges. ` +
+        'The current RequestContext is not flagged isAdmin.',
+    );
+    this.name = 'AdminRequiredError';
+  }
+}
+
+/**
  * Register a capability in the global registry.
  * The wrapper:
+ *   - enforces requiresAdmin against the current RequestContext (if set)
  *   - validates input against the Zod schema
  *   - invokes onStart / onComplete / onError observability hooks
  *   - validates output against the Zod schema
@@ -19,11 +37,14 @@ export function registerCapability<TInput extends z.ZodType, TOutput extends z.Z
     throw new Error(`Capability already registered: ${capability.name}`);
   }
 
+  const requiresAdmin = capability.requiresAdmin === true;
+
   registry.set(capability.name, {
     name: capability.name,
     description: capability.description,
     inputSchema: capability.input,
     outputSchema: capability.output,
+    requiresAdmin,
     execute: async (rawInput: unknown) => {
       const hooks = getObservabilityHooks();
       const start = performance.now();
@@ -32,6 +53,16 @@ export function registerCapability<TInput extends z.ZodType, TOutput extends z.Z
       hooks.onStart?.(baseEvent);
 
       try {
+        // Admin gate. We only enforce when there's an active RequestContext —
+        // a missing context is its own error (raised inside the capability via
+        // getRequestContext()), so we defer to that more specific message.
+        if (requiresAdmin) {
+          const ctx = tryGetRequestContext();
+          if (ctx && !ctx.isAdmin) {
+            throw new AdminRequiredError(capability.name);
+          }
+        }
+
         const validated = capability.input.parse(rawInput);
         const result = await capability.execute(validated);
         const validatedOutput = capability.output.parse(result);

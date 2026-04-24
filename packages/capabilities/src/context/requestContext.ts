@@ -24,6 +24,12 @@ export interface RequestContext {
   requestId?: string;
   /** True if this context was created via a service-account token (MCP, workers, scripts) */
   isServiceAccount?: boolean;
+  /**
+   * True if the calling user has the `users.is_admin` flag set OR if this is
+   * a service-account context (which is implicitly trusted). Used by the
+   * capability registry to gate `requiresAdmin: true` capabilities.
+   */
+  isAdmin?: boolean;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

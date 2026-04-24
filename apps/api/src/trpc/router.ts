@@ -2,6 +2,7 @@ import { initTRPC, TRPCError, type AnyTRPCRouter } from '@trpc/server';
 import { z } from 'zod';
 import superjson from 'superjson';
 import {
+  AdminRequiredError,
   getAllCapabilities,
   runInContext,
   type RegisteredCapability,
@@ -36,13 +37,31 @@ const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
 });
 
 /**
+ * Convert capability errors into tRPC errors with the right code.
+ * Centralized so both `capability.execute` and the per-domain procedures
+ * map known error types consistently.
+ */
+function rethrowAsTRPCError(err: unknown): never {
+  if (err instanceof AdminRequiredError) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+  }
+  throw err;
+}
+
+/**
  * Convert a registered capability into a tRPC mutation procedure.
  * Capability execution runs inside runInContext() so getRequestContext() works.
  */
 function capabilityToProcedure(capability: RegisteredCapability) {
   return authedProcedure
     .input(capability.inputSchema)
-    .mutation(async ({ input, ctx }) => runInContext(ctx.auth, () => capability.execute(input)));
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await runInContext(ctx.auth, () => capability.execute(input));
+      } catch (err) {
+        rethrowAsTRPCError(err);
+      }
+    });
 }
 
 /**
@@ -74,7 +93,11 @@ const capabilityRouter = t.router({
       if (!capability) {
         throw new TRPCError({ code: 'NOT_FOUND', message: `Unknown capability: ${input.name}` });
       }
-      return runInContext(ctx.auth, () => capability.execute(input.input));
+      try {
+        return await runInContext(ctx.auth, () => capability.execute(input.input));
+      } catch (err) {
+        rethrowAsTRPCError(err);
+      }
     }),
 
   // Public discovery endpoint — no auth needed

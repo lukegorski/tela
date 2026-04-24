@@ -50,6 +50,13 @@
       "when": 1777001183054,
       "tag": "0006_true_black_bird",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777012249666,
+      "tag": "0007_slimy_multiple_man",
+      "breakpoints": true
     }
   ]
 }

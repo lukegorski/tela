@@ -45,6 +45,15 @@ export const users = pgTable(
     avatarUrl: varchar('avatar_url', { length: 1024 }),
     locale: varchar('locale', { length: 10 }).notNull().default('en'),
 
+    // ─── Admin role (Phase 8.5) ───
+    /**
+     * True for Luke + cofounder + any operators. Gates the /admin route group
+     * and any capability marked `requiresAdmin: true` in the capability registry.
+     * Service-account tokens (MCP, workers, scripts) bypass this check by being
+     * trusted at the auth layer.
+     */
+    isAdmin: boolean('is_admin').notNull().default(false),
+
     // ─── Onboarding state (Phase 8.4) ───
     onboardingComplete: boolean('onboarding_complete').notNull().default(false),
     /** Style quiz preferences. Null until onboarding finished. */

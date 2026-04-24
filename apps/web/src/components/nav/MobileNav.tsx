@@ -8,9 +8,10 @@ import { PlusIcon, HangerIcon, ChatBubbleIcon, PersonIcon } from './icons';
 
 /**
  * Bottom tab bar shown on mobile screens. Mirrors the production app's
- * MobileNav (4 tabs: wardrobe, outfits, chat, settings).
+ * MobileNav (4 tabs: wardrobe, outfits, chat, settings). Admin users get a
+ * 5th tab to /admin.
  */
-export function MobileNav() {
+export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const { lang, dict } = useDictionary();
   const pathname = usePathname();
 
@@ -19,6 +20,15 @@ export function MobileNav() {
     { href: localePath(lang, '/outfits'), label: dict.nav?.myOutfits ?? 'Outfits', icon: HangerIcon },
     { href: localePath(lang, '/chat'), label: dict.nav?.chat ?? 'Tela', icon: ChatBubbleIcon },
     { href: localePath(lang, '/settings'), label: 'Me', icon: PersonIcon },
+    ...(isAdmin
+      ? [
+          {
+            href: localePath(lang, '/admin'),
+            label: 'Admin',
+            icon: PersonIcon, // TODO: dedicated icon when we have one
+          },
+        ]
+      : []),
   ];
 
   return (

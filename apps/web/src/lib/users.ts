@@ -49,6 +49,7 @@ export interface AppUser {
   displayName: string | null;
   avatarUrl: string | null;
   locale: string;
+  isAdmin: boolean;
   onboardingComplete: boolean;
   hasLocation: boolean;
   preferences: UserPreferences | null;
@@ -72,6 +73,7 @@ export async function getAppUserByAuthId(authUserId: string): Promise<AppUser | 
       display_name: string | null;
       avatar_url: string | null;
       locale: string;
+      is_admin: boolean;
       onboarding_complete: boolean;
       preferences: UserPreferences | null;
       body_info: UserBodyInfo | null;
@@ -79,7 +81,7 @@ export async function getAppUserByAuthId(authUserId: string): Promise<AppUser | 
     }[]
   >`
     SELECT id, email, phone, auth_user_id, display_name, avatar_url, locale,
-           onboarding_complete, preferences, body_info, location
+           is_admin, onboarding_complete, preferences, body_info, location
     FROM users
     WHERE auth_user_id = ${authUserId}
     LIMIT 1
@@ -94,6 +96,7 @@ export async function getAppUserByAuthId(authUserId: string): Promise<AppUser | 
     displayName: r.display_name,
     avatarUrl: r.avatar_url,
     locale: r.locale,
+    isAdmin: r.is_admin,
     onboardingComplete: r.onboarding_complete,
     hasLocation: r.location !== null,
     preferences: r.preferences,

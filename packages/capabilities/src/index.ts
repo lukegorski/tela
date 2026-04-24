@@ -1,11 +1,13 @@
 // Import all capability modules to trigger registration
 import './auth/index.js';
+import './user/index.js';
 import './wardrobe/index.js';
 import './item/index.js';
 import './profile/index.js';
 import './context/index.js';
 import './outfit/index.js';
 import './enhancement/index.js';
+import './chat/index.js';
 
 // Re-export registry functions
 export {

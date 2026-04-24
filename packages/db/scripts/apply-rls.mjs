@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import postgres from 'postgres';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const MIGRATION_FILE = join(__dirname, '..', 'drizzle', '0005_enable_rls.sql');
+const MIGRATION_FILE = join(__dirname, '..', 'drizzle', 'manual_001_enable_rls.sql');
 
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 

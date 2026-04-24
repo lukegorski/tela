@@ -1,8 +1,17 @@
-// Phase 8.5 will build the real wardrobe grid.
-// For now: a placeholder that proves auth + i18n + layout all work.
+/**
+ * Wardrobe grid. Server-renders the user's items (with signed enhanced-photo
+ * URLs already attached), and includes the client-side UploadButton.
+ */
 import { getCurrentAuthUser } from '@/lib/supabase/server';
-import { getDictionary } from '@/dictionaries';
+import { getAppUserByAuthId } from '@/lib/users';
+import { getWardrobeForUser } from '@/lib/wardrobe';
 import { isLocale } from '@/lib/i18n';
+import { redirect } from 'next/navigation';
+import { WardrobeGrid } from '@/components/wardrobe/WardrobeGrid';
+import { UploadButton } from '@/components/wardrobe/UploadButton';
+
+// Disable static generation — we always need the live user's data
+export const dynamic = 'force-dynamic';
 
 export default async function WardrobePage({
   params,
@@ -10,35 +19,31 @@ export default async function WardrobePage({
   params: Promise<{ lang: string }>;
 }) {
   const { lang } = await params;
-  const dict = isLocale(lang) ? await getDictionary(lang) : null;
-  const user = await getCurrentAuthUser();
+  const safeLang = isLocale(lang) ? lang : 'en';
+
+  const authUser = await getCurrentAuthUser();
+  if (!authUser) redirect('/sign-in');
+
+  const appUser = await getAppUserByAuthId(authUser.id);
+  if (!appUser || !appUser.onboardingComplete) {
+    redirect(`/${safeLang}/onboarding`);
+  }
+
+  const items = await getWardrobeForUser(appUser.id);
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-16 space-y-8">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-medium tracking-tight">
-          {dict?.nav?.pieces ?? 'Wardrobe'}
-        </h1>
-        <p className="text-sm text-stone-500">
-          Coming in Phase 8.5. For now, this proves auth + i18n + layout work.
-        </p>
+    <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-medium tracking-tight">Wardrobe</h1>
+          <p className="text-sm text-stone-500 mt-1">
+            {items.length} {items.length === 1 ? 'piece' : 'pieces'}
+          </p>
+        </div>
+        <UploadButton lang={safeLang} />
       </div>
 
-      <div className="border border-stone-200 p-4 space-y-2">
-        <p className="text-xs uppercase tracking-widest text-stone-400">Signed in as</p>
-        <p className="font-mono text-sm text-stone-900">{user?.email ?? '(no email)'}</p>
-        <p className="text-xs text-stone-500">locale: {lang}</p>
-        <p className="text-xs text-stone-500">auth user id: {user?.id}</p>
-      </div>
-
-      <form action="/auth/sign-out" method="post">
-        <button
-          type="submit"
-          className="px-4 py-2 border border-stone-300 hover:border-stone-400 text-sm transition-colors"
-        >
-          Sign out
-        </button>
-      </form>
+      <WardrobeGrid items={items} lang={safeLang} />
     </div>
   );
 }

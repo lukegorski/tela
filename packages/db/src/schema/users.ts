@@ -1,5 +1,33 @@
-import { pgTable, uuid, varchar, timestamp, check } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, check, boolean, jsonb } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+
+/**
+ * Onboarding-derived preferences (from the style quiz).
+ * Stored as JSONB for flexibility — the values are tagged strings from
+ * predefined option lists (see apps/web/src/lib/onboarding-options.ts).
+ */
+export interface UserPreferences {
+  styleKeywords: string[]; // e.g. ["Minimalist", "Classic"]
+  favoriteColors: string[];
+  avoidColors: string[];
+  formality: string; // one of FORMALITY_OPTIONS
+  lifestyle: string; // one of LIFESTYLE_OPTIONS
+}
+
+export interface UserBodyInfo {
+  bodyType: string;
+  height: string;
+  fitPreference: string;
+}
+
+export interface UserLocation {
+  city: string;
+  country: string;
+  lat: number;
+  lon: number;
+  timezone: string;
+  tempUnit: 'C' | 'F';
+}
 
 export const users = pgTable(
   'users',
@@ -16,6 +44,16 @@ export const users = pgTable(
     displayName: varchar('display_name', { length: 255 }),
     avatarUrl: varchar('avatar_url', { length: 1024 }),
     locale: varchar('locale', { length: 10 }).notNull().default('en'),
+
+    // ─── Onboarding state (Phase 8.4) ───
+    onboardingComplete: boolean('onboarding_complete').notNull().default(false),
+    /** Style quiz preferences. Null until onboarding finished. */
+    preferences: jsonb('preferences').$type<UserPreferences>(),
+    /** Body info for fit/proportion guidance. Null until onboarding finished. */
+    bodyInfo: jsonb('body_info').$type<UserBodyInfo>(),
+    /** Geo + timezone for weather-aware suggestions. Null until set. */
+    location: jsonb('location').$type<UserLocation>(),
+
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

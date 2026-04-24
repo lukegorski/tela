@@ -15,17 +15,22 @@ const output = z.object({
   locale: z.string(),
   source: z.string(),
   isServiceAccount: z.boolean().optional(),
+  // Onboarding state — drives whether the frontend routes to /onboarding
+  onboardingComplete: z.boolean(),
+  hasLocation: z.boolean(),
 });
 
 /**
  * Return the current authenticated user's profile + the request context.
- * Useful for clients to verify their token, scripts to look up their userId,
- * and debugging.
+ * Used by the frontend to:
+ *   - verify the token
+ *   - decide whether to redirect to /onboarding (onboardingComplete=false)
+ *   - look up the canonical app userId
  */
 export const whoami = registerCapability({
   name: 'auth.whoami',
   description:
-    "Return the current authenticated user's profile and request source. Useful for verifying auth tokens, looking up the canonical app userId from a service-account context, and debugging.",
+    "Return the current authenticated user's profile, onboarding state, and request source. Frontend uses this to decide where to route a freshly-signed-in user.",
   input,
   output,
 
@@ -47,6 +52,8 @@ export const whoami = registerCapability({
       locale: user.locale,
       source,
       isServiceAccount,
+      onboardingComplete: user.onboardingComplete,
+      hasLocation: user.location !== null,
     };
   },
 });

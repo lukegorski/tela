@@ -14,17 +14,18 @@
   "dependencies": {
     "@supabase/ssr": "^0.5.0",
     "@supabase/supabase-js": "^2.104.0",
+    "@tanstack/react-query": "^5.62.0",
+    "@tela/api": "workspace:*",
     "@trpc/client": "^11.3.0",
     "@trpc/react-query": "^11.3.0",
     "@trpc/server": "^11.3.0",
-    "@tanstack/react-query": "^5.62.0",
     "next": "16.2.1",
+    "postgres": "^3.4.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
     "superjson": "^2.2.0",
-    "zod": "^3.24.0",
-    "@tela/api": "workspace:*"
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -1,5 +1,28 @@
 // ─── Core entity types ───
 
+export interface UserPreferences {
+  styleKeywords: string[];
+  favoriteColors: string[];
+  avoidColors: string[];
+  formality: string;
+  lifestyle: string;
+}
+
+export interface UserBodyInfo {
+  bodyType: string;
+  height: string;
+  fitPreference: string;
+}
+
+export interface UserLocation {
+  city: string;
+  country: string;
+  lat: number;
+  lon: number;
+  timezone: string;
+  tempUnit: 'C' | 'F';
+}
+
 export interface User {
   id: string;
   email: string | null;
@@ -8,6 +31,10 @@ export interface User {
   displayName: string | null;
   avatarUrl: string | null;
   locale: string;
+  onboardingComplete: boolean;
+  preferences: UserPreferences | null;
+  bodyInfo: UserBodyInfo | null;
+  location: UserLocation | null;
   createdAt: Date;
   updatedAt: Date;
 }

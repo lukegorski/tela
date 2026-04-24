@@ -6,6 +6,7 @@ import { getAppUserByAuthId } from '@/lib/users';
 import { getOutfitForUser } from '@/lib/outfit-detail';
 import { SaveOutfitButton } from '@/components/outfits/SaveOutfitButton';
 import { DeleteOutfitButton } from '@/components/outfits/DeleteOutfitButton';
+import { TryOnButton } from '@/components/outfits/TryOnButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -91,6 +92,8 @@ export default async function OutfitDetailPage({
         <SaveOutfitButton outfitId={outfit.id} initiallySaved={outfit.saved} />
         <DeleteOutfitButton outfitId={outfit.id} lang={safeLang} />
       </div>
+
+      <TryOnButton outfitId={outfit.id} initial={outfit.tryOn} />
     </div>
   );
 }

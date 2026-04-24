@@ -70,16 +70,76 @@ export const chatMessages = pgTable(
 );
 
 // ─── Try-on (Phase 10) ───
-export const tryOnJobs = pgTable('try_on_jobs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  outfitId: uuid('outfit_id')
-    .notNull()
-    .references(() => outfits.id, { onDelete: 'cascade' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+
+/**
+ * Lifecycle states for a single try-on attempt:
+ *   pending    — created but not yet sent to Fashn
+ *   running    — at least one Fashn /run has been issued; we own a job ID
+ *   complete   — final image stored at result_storage_path
+ *   failed     — a step errored; see `error`
+ */
+export type TryOnStatus = 'pending' | 'running' | 'complete' | 'failed';
+
+/**
+ * For the layered (top + bottom + outerwear) pipeline we need to remember
+ * which step the in-flight Fashn job is for. Single-shot pipelines (dress
+ * or top-only or bottom-only) leave this null.
+ */
+export type TryOnStep = 'bottoms' | 'top' | 'outerwear' | 'dress';
+
+export const tryOnJobs = pgTable(
+  'try_on_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    outfitId: uuid('outfit_id')
+      .notNull()
+      .references(() => outfits.id, { onDelete: 'cascade' }),
+
+    /** Lifecycle state. See TryOnStatus. */
+    status: varchar('status', { length: 20 }).notNull().default('pending').$type<TryOnStatus>(),
+
+    /** Which built-in or self model image is being tried on. */
+    modelImageUrl: text('model_image_url').notNull(),
+
+    /**
+     * The Fashn prediction ID for the currently-running step (if any).
+     * Null when the job is not actively waiting on Fashn (pending, complete,
+     * failed) and for the brief window between steps in a layered pipeline.
+     */
+    asyncJobId: varchar('async_job_id', { length: 128 }),
+    /** Step the asyncJobId belongs to, when running a multi-step pipeline. */
+    asyncStep: varchar('async_step', { length: 20 }).$type<TryOnStep>(),
+
+    /**
+     * Most recent intermediate image URL produced by Fashn — kept around so
+     * the next step can layer on top of it. Becomes the final image when
+     * status flips to 'complete' (and is then mirrored into Supabase Storage
+     * via result_storage_path).
+     */
+    intermediateImageUrl: text('intermediate_image_url'),
+
+    /** Where the final composited image lives in Supabase Storage. */
+    resultStoragePath: text('result_storage_path'),
+
+    /** Sum of cents we've recorded for this job across all Fashn calls. */
+    costCents: integer('cost_cents').notNull().default(0),
+
+    /** When status='failed', the human-readable error. */
+    error: text('error'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('try_on_jobs_user_id_idx').on(table.userId),
+    index('try_on_jobs_outfit_id_idx').on(table.outfitId),
+    index('try_on_jobs_status_idx').on(table.status),
+  ],
+);
 
 // ─── Translations (deferred) ───
 export const translations = pgTable('translations', {

@@ -43,6 +43,16 @@ export interface OutfitDetail {
   createdAt: string;
   contextOccasion: string | null;
   items: OutfitDetailItem[];
+  /**
+   * Latest try-on job state for this outfit. null if no try-on has ever
+   * been started. The detail page uses this so the TryOnButton renders
+   * the right state without an additional client roundtrip.
+   */
+  tryOn: {
+    status: 'pending' | 'running' | 'complete' | 'failed' | null;
+    resultUrl: string | null;
+    error: string | null;
+  };
 }
 
 export async function getOutfitForUser(
@@ -119,6 +129,29 @@ export async function getOutfitForUser(
     }),
   );
 
+  // Latest try-on job (if any) — server-side so the page can render the
+  // right state immediately without a client roundtrip.
+  const tryOnRows = await sql<
+    {
+      status: 'pending' | 'running' | 'complete' | 'failed';
+      result_storage_path: string | null;
+      error: string | null;
+    }[]
+  >`
+    SELECT status, result_storage_path, error
+    FROM try_on_jobs
+    WHERE outfit_id = ${outfitId} AND user_id = ${userId}
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+  let tryOnResultUrl: string | null = null;
+  if (tryOnRows.length > 0 && tryOnRows[0].status === 'complete' && tryOnRows[0].result_storage_path) {
+    const { data } = await supabase.storage
+      .from('try-on-results')
+      .createSignedUrl(tryOnRows[0].result_storage_path, 3600);
+    tryOnResultUrl = data?.signedUrl ?? null;
+  }
+
   const o = outfitRow[0];
   return {
     id: o.id,
@@ -128,5 +161,10 @@ export async function getOutfitForUser(
     createdAt: o.created_at.toISOString(),
     contextOccasion: o.context_occasion,
     items,
+    tryOn: {
+      status: tryOnRows[0]?.status ?? null,
+      resultUrl: tryOnResultUrl,
+      error: tryOnRows[0]?.error ?? null,
+    },
   };
 }

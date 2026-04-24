@@ -28,3 +28,5 @@ export function getSupabaseAdmin(): SupabaseClient {
 }
 
 export const ITEM_PHOTOS_BUCKET = 'item-photos';
+/** Bucket for try-on result images. Created on first use if missing. */
+export const TRY_ON_BUCKET = 'try-on-results';

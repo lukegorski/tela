@@ -33,5 +33,14 @@ export type {
 } from './types.js';
 export { OpenAIProvider } from './providers/openai.js';
 export { MockProvider } from './providers/mock.js';
+export {
+  startTryOn,
+  getStatus as getFashnStatus,
+  extractOutputUrl as extractFashnOutputUrl,
+  pollUntilDone as pollFashnUntilDone,
+  type FashnCategory,
+  type FashnStatus,
+  type FashnStatusResponse,
+} from './providers/fashn.js';
 export { calculateCost } from './pricing.js';
 export { RateLimitError } from './rateLimits.js';

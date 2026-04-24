@@ -9,6 +9,7 @@ import './outfit/index.js';
 import './enhancement/index.js';
 import './chat/index.js';
 import './admin/index.js';
+import './tryon/index.js';
 
 // Re-export registry functions
 export {

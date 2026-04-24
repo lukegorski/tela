@@ -16,7 +16,7 @@ const OCCASIONS: { value: Occasion; label: string }[] = [
   { value: 'travel', label: 'Travel' },
 ];
 
-export function GenerateOutfitsButton() {
+export function GenerateOutfitsButton({ lang = 'en' }: { lang?: string } = {}) {
   const router = useRouter();
   const execute = trpc.capability.execute.useMutation();
   const [open, setOpen] = useState(false);
@@ -25,8 +25,32 @@ export function GenerateOutfitsButton() {
   const [status, setStatus] = useState('');
 
   async function handleGenerate() {
-    setStatus('Assembling context…');
     try {
+      // First-time-only: ensure a style profile exists. profile.get throws
+      // a specific error when the profile is missing — catch that and
+      // trigger closetRead. Other errors (auth, network) bubble up.
+      setStatus('Checking your style profile…');
+      let hasProfile = true;
+      try {
+        await execute.mutateAsync({ name: 'profile.get', input: {} });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('No style profile')) {
+          hasProfile = false;
+        } else {
+          throw err;
+        }
+      }
+
+      if (!hasProfile) {
+        setStatus('Reading your closet for the first time (this takes ~10 seconds)…');
+        await execute.mutateAsync({
+          name: 'profile.closetRead',
+          input: { locale: lang, reason: 'first_outfit_generation' },
+        });
+      }
+
+      setStatus('Assembling context…');
       const ctx = (await execute.mutateAsync({
         name: 'context.assemble',
         input: {

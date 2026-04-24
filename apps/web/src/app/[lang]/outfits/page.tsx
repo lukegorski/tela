@@ -35,7 +35,7 @@ export default async function OutfitsPage({
         </p>
       </div>
 
-      <GenerateOutfitsButton />
+      <GenerateOutfitsButton lang={safeLang} />
 
       {outfits.length === 0 ? (
         <div className="text-center py-16">

@@ -17,3 +17,6 @@ export { listPrompts } from './listPrompts.js';
 export { getPromptHistory } from './getPromptHistory.js';
 export { createPromptVersion } from './createPromptVersion.js';
 export { rollbackPrompt } from './rollbackPrompt.js';
+export { getCosts } from './getCosts.js';
+export { listUsers } from './listUsers.js';
+export { getUserDetail } from './getUserDetail.js';

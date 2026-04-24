@@ -1,9 +1,13 @@
 {
+  "/[lang]/chat/page": "/[lang]/chat",
+  "/[lang]/onboarding/page": "/[lang]/onboarding",
+  "/[lang]/outfits/page": "/[lang]/outfits",
+  "/[lang]/settings/page": "/[lang]/settings",
+  "/[lang]/wardrobe/page": "/[lang]/wardrobe",
   "/_global-error/page": "/_global-error",
   "/_not-found/page": "/_not-found",
   "/auth/callback/route": "/auth/callback",
   "/auth/sign-out/route": "/auth/sign-out",
   "/page": "/",
-  "/sign-in/page": "/sign-in",
-  "/wardrobe/page": "/wardrobe"
+  "/sign-in/page": "/sign-in"
 }

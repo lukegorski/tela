@@ -21,7 +21,48 @@
     "afterFiles": [],
     "fallback": []
   },
-  "dynamicRoutes": [],
+  "dynamicRoutes": [
+    {
+      "page": "/[lang]/chat",
+      "regex": "^/([^/]+?)/chat(?:/)?$",
+      "routeKeys": {
+        "nxtPlang": "nxtPlang"
+      },
+      "namedRegex": "^/(?<nxtPlang>[^/]+?)/chat(?:/)?$"
+    },
+    {
+      "page": "/[lang]/onboarding",
+      "regex": "^/([^/]+?)/onboarding(?:/)?$",
+      "routeKeys": {
+        "nxtPlang": "nxtPlang"
+      },
+      "namedRegex": "^/(?<nxtPlang>[^/]+?)/onboarding(?:/)?$"
+    },
+    {
+      "page": "/[lang]/outfits",
+      "regex": "^/([^/]+?)/outfits(?:/)?$",
+      "routeKeys": {
+        "nxtPlang": "nxtPlang"
+      },
+      "namedRegex": "^/(?<nxtPlang>[^/]+?)/outfits(?:/)?$"
+    },
+    {
+      "page": "/[lang]/settings",
+      "regex": "^/([^/]+?)/settings(?:/)?$",
+      "routeKeys": {
+        "nxtPlang": "nxtPlang"
+      },
+      "namedRegex": "^/(?<nxtPlang>[^/]+?)/settings(?:/)?$"
+    },
+    {
+      "page": "/[lang]/wardrobe",
+      "regex": "^/([^/]+?)/wardrobe(?:/)?$",
+      "routeKeys": {
+        "nxtPlang": "nxtPlang"
+      },
+      "namedRegex": "^/(?<nxtPlang>[^/]+?)/wardrobe(?:/)?$"
+    }
+  ],
   "staticRoutes": [
     {
       "page": "/",
@@ -58,12 +99,6 @@
       "regex": "^/sign\\-in(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/sign\\-in(?:/)?$"
-    },
-    {
-      "page": "/wardrobe",
-      "regex": "^/wardrobe(?:/)?$",
-      "routeKeys": {},
-      "namedRegex": "^/wardrobe(?:/)?$"
     }
   ],
   "dataRoutes": [],

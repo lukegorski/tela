@@ -3,6 +3,11 @@ dist/
 .turbo/
 *.tsbuildinfo
 
+# Next.js build / dev cache (per-app)
+.next/
+.vercel/
+next-env.d.ts
+
 # Environment
 .env
 .env.local

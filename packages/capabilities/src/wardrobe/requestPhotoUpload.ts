@@ -5,7 +5,10 @@ import { getSupabaseAdmin, ITEM_PHOTOS_BUCKET } from '../storage/supabase.js';
 
 const input = z.object({
   filename: z.string().min(1).max(255),
-  mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/heic']),
+  // Restricted to formats OpenAI's vision model accepts. HEIC is intentionally
+  // excluded — iPhone HEIC photos must be converted (client- or server-side)
+  // before they hit item.analyze. Server-side conversion is post-MVP.
+  mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
 });
 
 const output = z.object({

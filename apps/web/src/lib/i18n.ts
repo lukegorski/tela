@@ -43,6 +43,36 @@ export const LANGUAGE_NAMES: Record<Locale, string> = {
   fi: 'Suomi',
 };
 
+/** English names for AI prompt locale instructions (matches legacy). */
+export const LANGUAGE_ENGLISH_NAMES: Record<Locale, string> = {
+  en: 'English',
+  es: 'Spanish',
+  pt: 'Brazilian Portuguese',
+  fr: 'French',
+  de: 'German',
+  ru: 'Russian',
+  pl: 'Polish',
+  zh: 'Simplified Chinese',
+  ja: 'Japanese',
+  ms: 'Malay',
+  ta: 'Tamil',
+  sv: 'Swedish',
+  nb: 'Norwegian',
+  fi: 'Finnish',
+};
+
+/**
+ * Tiny template helper. Replaces `{name}` placeholders with values from
+ * `vars`. Used by ported components to interpolate dictionary strings
+ * (e.g. `t(dict.wardrobe.someFilesUnsupported, { count: '3' })`).
+ */
+export function t(template: string, vars: Record<string, string>): string {
+  return Object.entries(vars).reduce(
+    (str, [key, val]) => str.replace(`{${key}}`, val),
+    template,
+  );
+}
+
 /** Build a locale-prefixed path: localePath('es', '/wardrobe') → '/es/wardrobe' */
 export function localePath(lang: string, path: string): string {
   return `/${lang}${path}`;

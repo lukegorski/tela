@@ -71,6 +71,13 @@
       "when": 1777080227587,
       "tag": "0009_yellow_ezekiel",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777090714167,
+      "tag": "0010_kind_khan",
+      "breakpoints": true
     }
   ]
 }

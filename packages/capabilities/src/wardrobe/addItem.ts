@@ -20,6 +20,7 @@ const input = z.object({
     description: z.string().nullable().default(null),
     formalityScore: z.number().min(0).max(1).default(0.5),
     materialWeight: z.enum(['light', 'medium', 'heavy']).default('medium'),
+    material: z.string().nullable().default(null),
     seasonCompatibility: z.array(z.enum(['spring', 'summer', 'fall', 'winter'])).default([]),
     analysisLocale: z.string().default('en'),
   }),
@@ -80,6 +81,7 @@ export const addItem = registerCapability({
         description: metadata.description,
         formalityScore: metadata.formalityScore,
         materialWeight: metadata.materialWeight,
+        material: metadata.material,
         seasonCompatibility: metadata.seasonCompatibility,
         analysisLocale: metadata.analysisLocale,
       })

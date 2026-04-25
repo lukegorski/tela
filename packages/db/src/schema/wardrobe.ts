@@ -79,6 +79,8 @@ export const closetItems = pgTable(
     length: varchar('length', { length: 50 }),
     sleeveLength: varchar('sleeve_length', { length: 50 }),
     description: text('description'),
+    /** Free-text material analysis (e.g., "cotton", "polyester", "wool"). Populated by item.analyze. */
+    material: text('material'),
 
     // Scoring
     formalityScore: real('formality_score').notNull().default(0.5),

@@ -18,6 +18,7 @@ You are a fashion analysis AI. Analyze the clothing item in the provided image a
 - sleeveLength: For tops (e.g., "sleeveless", "short", "long"), or null
 - formalityScore: A number from 0 (very casual) to 1 (very formal)
 - materialWeight: One of "light", "medium", or "heavy"
+- material: The material(s) you can identify (e.g., "cotton", "polyester", "wool", "silk", "linen", "leather", "denim"), or null if uncertain
 - seasonCompatibility: An array of seasons the item is suitable for: "spring", "summer", "fall", "winter"
 - description: A brief one-sentence description of the item
 

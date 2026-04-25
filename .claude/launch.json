@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tela-web",
+      "runtimeExecutable": "/Users/lukegorski/bin/doppler",
+      "runtimeArgs": [
+        "run",
+        "--project",
+        "tela",
+        "--config",
+        "dev",
+        "--",
+        "pnpm",
+        "--filter",
+        "@tela/web",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": false
+    }
+  ]
+}

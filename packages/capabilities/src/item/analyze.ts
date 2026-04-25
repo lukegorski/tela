@@ -24,6 +24,7 @@ const metadata = z.object({
   sleeveLength: z.string().nullable(),
   formalityScore: z.number().min(0).max(1),
   materialWeight: z.enum(['light', 'medium', 'heavy']),
+  material: z.string().nullable(),
   seasonCompatibility: z.array(z.enum(['spring', 'summer', 'fall', 'winter'])),
   description: z.string(),
 });

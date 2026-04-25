@@ -29,6 +29,28 @@ export interface UserLocation {
   tempUnit: 'C' | 'F';
 }
 
+/**
+ * Try-on configuration the user has chosen. Mirrors the legacy
+ * `TryOnSettings` shape so ported settings UI maps 1:1 onto our backend.
+ *
+ * - background: aesthetic backdrop the model is rendered against
+ * - model: 'self' uses the user's uploaded photo; the model-* options are
+ *   the built-in models (see /public/models/)
+ * - selfPhotoURL: storage URL for the user's uploaded model photo when
+ *   model === 'self'. Null when not uploaded.
+ */
+export interface UserTryOnSettings {
+  background: 'neutral' | 'chic-interior' | 'nighttime';
+  model: 'self' | 'model-woman' | 'model-man';
+  selfPhotoURL: string | null;
+}
+
+export const DEFAULT_TRY_ON_SETTINGS: UserTryOnSettings = {
+  background: 'neutral',
+  model: 'model-woman',
+  selfPhotoURL: null,
+};
+
 export const users = pgTable(
   'users',
   {
@@ -62,6 +84,14 @@ export const users = pgTable(
     bodyInfo: jsonb('body_info').$type<UserBodyInfo>(),
     /** Geo + timezone for weather-aware suggestions. Null until set. */
     location: jsonb('location').$type<UserLocation>(),
+
+    // ─── Try-on settings (Phase visual-port) ───
+    /**
+     * Try-on rendering preferences (background style, model choice).
+     * Null until the user touches the try-on settings UI; the app reads
+     * with a DEFAULT_TRY_ON_SETTINGS fallback.
+     */
+    tryOnSettings: jsonb('try_on_settings').$type<UserTryOnSettings>(),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

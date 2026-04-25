@@ -1,10 +1,16 @@
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
-import { getDb, users } from '@tela/db';
+import { getDb, users, DEFAULT_TRY_ON_SETTINGS } from '@tela/db';
 import { registerCapability } from '../registry.js';
 import { getRequestContext } from '../context/requestContext.js';
 
 const input = z.object({});
+
+const tryOnSettingsSchema = z.object({
+  background: z.enum(['neutral', 'chic-interior', 'nighttime']),
+  model: z.enum(['self', 'model-woman', 'model-man']),
+  selfPhotoURL: z.string().nullable(),
+});
 
 const output = z.object({
   userId: z.string().uuid(),
@@ -20,6 +26,11 @@ const output = z.object({
   // Onboarding state — drives whether the frontend routes to /onboarding
   onboardingComplete: z.boolean(),
   hasLocation: z.boolean(),
+  /**
+   * Try-on rendering preferences. Defaults applied when the user hasn't
+   * touched the settings UI yet — saves the frontend from null-checks.
+   */
+  tryOnSettings: tryOnSettingsSchema,
 });
 
 /**
@@ -57,6 +68,7 @@ export const whoami = registerCapability({
       isAdmin: user.isAdmin,
       onboardingComplete: user.onboardingComplete,
       hasLocation: user.location !== null,
+      tryOnSettings: user.tryOnSettings ?? DEFAULT_TRY_ON_SETTINGS,
     };
   },
 });

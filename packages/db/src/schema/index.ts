@@ -1,4 +1,11 @@
-export { users } from './users.js';
+export {
+  users,
+  DEFAULT_TRY_ON_SETTINGS,
+  type UserPreferences,
+  type UserBodyInfo,
+  type UserLocation,
+  type UserTryOnSettings,
+} from './users.js';
 export { closets, itemPhotos, closetItems } from './wardrobe.js';
 export { styleProfiles, styleProfileVersions } from './profiles.js';
 export { contexts, generations, outfits, outfitItems } from './outfits.js';

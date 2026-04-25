@@ -34,15 +34,27 @@ export interface AuthUser {
 }
 
 /**
+ * Try-on rendering preferences. Mirrors the legacy `TryOnSettings`
+ * interface so the ported settings UI maps 1:1 onto our backend.
+ */
+export interface AuthTryOnSettings {
+  background: 'neutral' | 'chic-interior' | 'nighttime';
+  model: 'self' | 'model-woman' | 'model-man';
+  selfPhotoURL: string | null;
+}
+
+/**
  * Canonical app-side profile, matching the structure the legacy
  * components expect on the `profile` field — but sourced from our
  * Postgres `users` row plus related tables (style_profiles for styleDna,
  * wardrobe_gaps for the gaps list).
  *
- * Fields like `wardrobeGaps`, `tryOnSettings`, `styleDna` are populated
- * once the corresponding capabilities exist; until then they're undefined
- * and ported components handle that the same way they handle the legacy
- * "not yet set" states.
+ * `wardrobeGaps` and `styleDna` aren't included here because they're
+ * larger and not needed on every page — components fetch them via
+ * dedicated capabilities (user.getWardrobeGaps, profile.get) when they
+ * actually render those concepts. `tryOnSettings` IS included because
+ * it's small, the settings + try-on UIs read it directly, and the server
+ * supplies safe defaults so the field is always populated.
  */
 export interface AuthProfile {
   id: string;
@@ -54,6 +66,7 @@ export interface AuthProfile {
   isAdmin: boolean;
   onboardingComplete: boolean;
   hasLocation: boolean;
+  tryOnSettings: AuthTryOnSettings;
 }
 
 interface UseAuthReturn {
@@ -95,6 +108,7 @@ export function useAuth(): UseAuthReturn {
         isAdmin: boolean;
         onboardingComplete: boolean;
         hasLocation: boolean;
+        tryOnSettings: AuthTryOnSettings;
       };
       const p: AuthProfile = {
         id: result.userId,
@@ -106,6 +120,7 @@ export function useAuth(): UseAuthReturn {
         isAdmin: result.isAdmin,
         onboardingComplete: result.onboardingComplete,
         hasLocation: result.hasLocation,
+        tryOnSettings: result.tryOnSettings,
       };
       // Sync locale cookie so server components (RSC layouts, dictionary
       // loader) see it on the next navigation. Matches legacy behavior.

@@ -344,13 +344,13 @@ See "Push approval pattern" above.
 | MobileNav (mobile bottom tabs) | ✅ Ported | `apps/web/src/components/MobileNav.tsx` |
 | Settings panel (`SettingsMenu`, Theme/Language/Location/TryOn content) | ✅ Ported | `apps/web/src/components/{SettingsMenu,ThemeSettingsContent,LanguageSettingsContent,LocationSettingsContent,TryOnSettingsContent}.tsx`, `apps/web/src/components/LanguageSwitcher.tsx` |
 | 4 settings sub-pages | ✅ Ported | `apps/web/src/app/(main)/[lang]/settings/{,location,language,try-on,theme}/page.tsx` |
-| **Wardrobe page + `WardrobeItemCard` + `ItemDetailContent` + `ColorFilterChips` + `useWardrobe` hook** | ❌ MVP — needs port (D.6) | Legacy: `src/app/(main)/[lang]/wardrobe/page.tsx`, `src/components/{WardrobeItemCard,ItemDetailContent,ColorFilterChips}.tsx`, `src/hooks/useWardrobe.ts` |
+| Wardrobe page + `WardrobeItemCard` + `ItemDetailContent` + `ColorFilterChips` + `useWardrobe` hook | ✅ Ported (D.6) | `apps/web/src/app/(main)/[lang]/wardrobe/page.tsx`, `apps/web/src/components/{WardrobeItemCard,ItemDetailContent,ColorFilterChips}.tsx`, `apps/web/src/hooks/useWardrobe.ts` |
+| Wardrobe item detail (inline via `BottomSheet`, no separate route) | ✅ Done (D.6 deleted my MVP `[itemId]/page.tsx`) | — |
 | **Outfits page + `OutfitCard` + `OutfitHero` + `OutfitPiecesSheet` + `OutfitGridCell` + `useOutfits`** | ❌ MVP — needs port (D.7) | Legacy: `src/app/(main)/[lang]/outfits/page.tsx`, `src/components/Outfit*.tsx`, `src/hooks/useOutfits.ts` (if exists) |
 | Outfit detail page | ❌ MVP — needs port (D.7) | Legacy: `src/app/(main)/[lang]/outfits/[id]/page.tsx` |
 | **Lookbook page** (saved outfits) | ❌ Doesn't exist yet (D.8) | Legacy: `src/app/(main)/[lang]/lookbook/page.tsx` |
 | **Chat page + `ChatComposer` + `ChatMessage` + `ChatItemGrid` + `ChatOutfitGrid` + `ChatWardrobePicker` + `useChat`** | ❌ MVP — needs port (D.9). Switch from legacy NDJSON to our SSE endpoint. | Legacy: `src/app/(main)/[lang]/chat/page.tsx`, `src/components/Chat*.tsx`, `src/hooks/useChat.ts` |
 | **Dashboard page** | ❌ Doesn't exist yet (D.10) | Legacy: `src/app/(main)/[lang]/dashboard/page.tsx` |
-| Wardrobe item detail | (legacy renders inline via `BottomSheet`, no separate page) | `apps/web/src/app/(main)/[lang]/wardrobe/[itemId]/` — my MVP page should be deleted as part of D.6 |
 | Outfit detail (separate page vs inline) | TBD — read legacy outfit detail behavior in D.7 | |
 
 To verify the table is current, run `git log --oneline | head -30`
@@ -385,6 +385,23 @@ When porting a new screen, look at how these were done:
   port + the `user.completeOnboarding` capability swap, plus the
   decision to write `wardrobeGaps` to the relational
   `wardrobe_gaps` table instead of as a JSONB blob.
+- **`3ad1472` — Phase D.6 (wardrobe)**: largest port to date. Schema
+  migration (added `material text` to `closet_items`), three
+  capabilities extended for a single rich item shape (flat analysis
+  fields, ISO timestamps, joined enhancement state, pre-signed URLs)
+  with the join + URL-signing centralized in
+  `wardrobe/itemShape.ts` (one-place reshape, not residue).
+  `wardrobe.removeItem` wrapped in a Drizzle transaction with
+  cascade-deletion of orphaned outfits + per-cascaded-outfit
+  `outfit.deleted` events tagged `{ reason: 'wardrobe_item_removed',
+  triggeringItemId }`. Legacy MVP `[itemId]/page.tsx` deleted —
+  detail renders inline via `BottomSheet` like legacy.
+- **`3450c08` — auth.whoami stability fix**: not a port; a bug found
+  during D.6 testing. `useAuth` re-ran its effect every render
+  because `useMutation().execute` returns a fresh wrapper each
+  render. Caused infinite `auth.whoami` re-fetches → browser
+  `ERR_INSUFFICIENT_RESOURCES`. Fix: hold `execute` in a ref, drop
+  `fetchProfile` deps to `[]`. See pitfall #11.
 
 ---
 
@@ -422,17 +439,16 @@ email:
 
 ---
 
-## Schema gaps to resolve before D.6 (wardrobe)
+## Schema gaps — resolved in D.6 (kept for reference)
 
-Surface these to Luke before starting wardrobe; they need decisions:
-
-| Legacy field | Our schema | Question |
+| Legacy field | Decision | Result |
 |---|---|---|
-| `material: string` (free text — "cotton", "wool", etc.) | `material_weight: enum('light','medium','heavy')` | Add `material text` column to `closet_items`? Or repurpose `material_weight` in UI? |
-| `bgColors: {tl, tr, bl, br}` (4-corner gradient backgrounds) | `background_color text` (single hex) | Use single hex for all 4 corners (subtle visual difference)? Or add corner colors? |
-| `analysis.translations` per-locale | not in schema | Defer. Components handle empty gracefully. |
+| `material: string` (free text — "cotton", "wool", etc.) | **Added** `material text` column to `closet_items` | Migration `0010_kind_khan.sql`. `item.analyze` prompt + output schema now includes `material`. |
+| `bgColors: {tl, tr, bl, br}` (4-corner gradient backgrounds) | **Single hex for all 4 corners.** Background gradient uses `background_color` for all positions. Visually nearly identical; not worth a 4-column schema change. | UI implemented in `WardrobeItemCard` reusing single hex. |
+| `analysis.translations` per-locale | **Deferred.** Components fall back to English when missing. | `translation.translateLocale` capability still TBD. |
 
-For D.7 (outfits), more gaps in the plan file.
+For D.7 (outfits), more gaps in `docs/visual-port-plan.md`. Surface
+them to Luke before starting D.7.
 
 ---
 
@@ -477,6 +493,31 @@ For D.7 (outfits), more gaps in the plan file.
 
 10. **Pushing without asking.** Standing rule from Luke's memory.
     Don't.
+
+11. **Unstable callbacks from `useMutation()` in effect deps.** This
+    bit us in D.6. tRPC's `useMutation()` returns a new `execute`
+    wrapper on every render even though the underlying `mutateAsync`
+    is stable. Putting `execute` in a `useEffect` dep array (or in a
+    `useCallback`'s dep array that ends up in a `useEffect`) makes
+    the effect re-run every render. In auth-context-style hooks that
+    call a mutation in the effect (`auth.whoami`, etc.), this
+    produces an infinite loop that floods the network queue and
+    eventually trips `ERR_INSUFFICIENT_RESOURCES`. Pattern: hold the
+    mutation's `execute` in a `useRef` and keep the effect's deps
+    list either empty or restricted to truly stable values. See
+    `apps/web/src/hooks/useAuth.ts` (commit `3450c08`) for the
+    pattern.
+
+12. **Spreading data reshape across multiple capabilities or hooks.**
+    D.6 needed a "rich item shape" (flat analysis fields + ISO
+    timestamps + joined enhancement state + pre-signed URLs) for
+    three capabilities (`listItems`, `getItem`, soon `addItem`
+    response). The right move was to centralize the join + URL
+    signing in `wardrobe/itemShape.ts` and have all three call into
+    it. The wrong move would have been duplicating the logic across
+    each capability — that's the spread-across-files reshape that
+    PORT.md flags as residue. When you spot the same shape adapter
+    appearing in 2+ files, extract it.
 
 ---
 

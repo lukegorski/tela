@@ -10,7 +10,6 @@ import Link from 'next/link';
 import { trpc } from '@/trpc/client';
 
 interface ExampleFormProps {
-  lang: string;
   initial?: {
     id: string;
     title: string;
@@ -21,7 +20,7 @@ interface ExampleFormProps {
   };
 }
 
-export function ExampleForm({ lang, initial }: ExampleFormProps) {
+export function ExampleForm({ initial }: ExampleFormProps) {
   const router = useRouter();
   const isEditing = Boolean(initial?.id);
 
@@ -69,7 +68,7 @@ export function ExampleForm({ lang, initial }: ExampleFormProps) {
           input: payload,
         });
       }
-      router.push(`/${lang}/admin/examples`);
+      router.push(`/admin/examples`);
       router.refresh();
     } catch (err) {
       setStatus(`Failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -86,7 +85,7 @@ export function ExampleForm({ lang, initial }: ExampleFormProps) {
         name: 'admin.deleteExample',
         input: { id: initial.id },
       });
-      router.push(`/${lang}/admin/examples`);
+      router.push(`/admin/examples`);
       router.refresh();
     } catch (err) {
       setStatus(`Failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -100,7 +99,7 @@ export function ExampleForm({ lang, initial }: ExampleFormProps) {
           {isEditing ? 'Edit annotated example' : 'New annotated example'}
         </h2>
         <Link
-          href={`/${lang}/admin/examples`}
+          href={`/admin/examples`}
           className="text-sm text-stone-500 hover:text-stone-900"
         >
           Cancel

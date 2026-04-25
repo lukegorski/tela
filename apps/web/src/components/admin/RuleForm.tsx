@@ -15,7 +15,6 @@ import Link from 'next/link';
 import { trpc } from '@/trpc/client';
 
 interface RuleFormProps {
-  lang: string;
   initial?: {
     id: string;
     category: string;
@@ -26,7 +25,7 @@ interface RuleFormProps {
   };
 }
 
-export function RuleForm({ lang, initial }: RuleFormProps) {
+export function RuleForm({ initial }: RuleFormProps) {
   const router = useRouter();
   const isEditing = Boolean(initial?.id);
 
@@ -70,7 +69,7 @@ export function RuleForm({ lang, initial }: RuleFormProps) {
           },
         });
       }
-      router.push(`/${lang}/admin/rules`);
+      router.push(`/admin/rules`);
       router.refresh();
     } catch (err) {
       setStatus(`Failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -87,7 +86,7 @@ export function RuleForm({ lang, initial }: RuleFormProps) {
         name: 'admin.deleteRule',
         input: { id: initial.id },
       });
-      router.push(`/${lang}/admin/rules`);
+      router.push(`/admin/rules`);
       router.refresh();
     } catch (err) {
       setStatus(`Failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -106,7 +105,7 @@ export function RuleForm({ lang, initial }: RuleFormProps) {
           )}
         </h2>
         <Link
-          href={`/${lang}/admin/rules`}
+          href={`/admin/rules`}
           className="text-sm text-stone-500 hover:text-stone-900"
         >
           Cancel

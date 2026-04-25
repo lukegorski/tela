@@ -28,7 +28,6 @@ export interface PromptEditorVersion {
 }
 
 interface PromptEditorProps {
-  lang: string;
   name: string;
   description: string;
   latestVersionId: string | null;
@@ -36,7 +35,6 @@ interface PromptEditorProps {
 }
 
 export function PromptEditor({
-  lang,
   name,
   description,
   latestVersionId,
@@ -111,7 +109,7 @@ export function PromptEditor({
           <h2 className="mt-1 text-lg font-medium font-mono tracking-tight">{name}</h2>
           <p className="mt-1 text-sm text-stone-500">{description}</p>
         </div>
-        <Link href={`/${lang}/admin/prompts`} className="text-sm text-stone-500 hover:text-stone-900">
+        <Link href={`/admin/prompts`} className="text-sm text-stone-500 hover:text-stone-900">
           Back
         </Link>
       </header>

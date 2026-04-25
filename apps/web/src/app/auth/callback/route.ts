@@ -12,20 +12,20 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get('code');
   const next = url.searchParams.get('next') ?? '/';
 
+  // Where to send the user when something goes wrong. Landing page is the
+  // login surface; an `?error` query param surfaces in the UI.
+  const errorRedirect = (msg: string) =>
+    NextResponse.redirect(new URL(`/?error=${encodeURIComponent(msg)}`, request.url));
+
   if (!code) {
-    return NextResponse.redirect(new URL('/sign-in?error=missing_code', request.url));
+    return errorRedirect('missing_code');
   }
 
   const supabase = await getSupabaseServerClient();
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    return NextResponse.redirect(
-      new URL(
-        `/sign-in?error=${encodeURIComponent(error.message)}`,
-        request.url,
-      ),
-    );
+    return errorRedirect(error.message);
   }
 
   return NextResponse.redirect(new URL(next, request.url));

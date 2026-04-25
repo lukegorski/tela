@@ -5,14 +5,15 @@
  * 2. Redirect locale-less paths (e.g. /wardrobe) to a locale-prefixed
  *    path (e.g. /en/wardrobe) based on the user's Accept-Language header.
  *
- * Auth-only routes (/sign-in, /auth/*) and tRPC API calls are NOT
- * locale-prefixed.
+ * Routes that don't take a locale prefix (/admin under (admin) route
+ * group, /auth/* OAuth callback + sign-out, /trpc, /chat/stream, Next
+ * internals) are exempt from locale routing.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { detectLocaleFromHeader, isLocale } from '@/lib/i18n';
 
-const LOCALE_EXEMPT_PREFIXES = ['/sign-in', '/auth', '/api', '/_next'];
+const LOCALE_EXEMPT_PREFIXES = ['/admin', '/auth', '/api', '/trpc', '/chat/stream', '/_next'];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

@@ -107,6 +107,14 @@ interface UseAuthReturn {
 export function useAuth(): UseAuthReturn {
   const supabase = useRef(getSupabaseBrowserClient()).current;
   const execute = trpc.capability.execute.useMutation();
+  // useMutation returns a fresh wrapper object every render even though
+  // mutateAsync itself is a stable ref. Keep a ref to the latest wrapper
+  // so the callbacks below can read it without including `execute` in
+  // their useCallback deps — otherwise they'd recompute every render and
+  // the auth effect below would re-run on every render, infinite-looping
+  // (one auth.whoami POST per render → browser hits ERR_INSUFFICIENT_RESOURCES).
+  const executeRef = useRef(execute);
+  executeRef.current = execute;
 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<AuthProfile | null>(null);
@@ -119,7 +127,7 @@ export function useAuth(): UseAuthReturn {
    */
   const fetchProfile = useCallback(async (): Promise<AuthProfile | null> => {
     try {
-      const result = (await execute.mutateAsync({
+      const result = (await executeRef.current.mutateAsync({
         name: 'auth.whoami',
         input: {},
       })) as {
@@ -159,7 +167,7 @@ export function useAuth(): UseAuthReturn {
     } catch {
       return null;
     }
-  }, [execute]);
+  }, []);
 
   useEffect(() => {
     let mounted = true;

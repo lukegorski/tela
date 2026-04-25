@@ -65,13 +65,18 @@ export function useWardrobe() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
+  // Stable string id — `user` itself is recreated on every render by
+  // useAuth (via setUser(toAuthUser(...))), so depending on the object
+  // reference would churn this hook's effects on every parent render.
+  const userId = user?.id ?? null;
+
   const execute = trpc.capability.execute.useMutation();
   const executeRef = useRef(execute);
   executeRef.current = execute;
 
-  // Stable refetch — no dependency on items so polling effect doesn't churn.
+  // Stable refetch — depends only on the stable userId string.
   const refetch = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setItems([]);
       setLoading(false);
       return;
@@ -85,7 +90,7 @@ export function useWardrobe() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [userId]);
 
   // Initial load + poll while any item is enhancing.
   useEffect(() => {
@@ -108,7 +113,7 @@ export function useWardrobe() {
       });
     }
 
-    if (user) {
+    if (userId) {
       setLoading(true);
       void tick();
     } else {
@@ -120,11 +125,11 @@ export function useWardrobe() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [user, refetch]);
+  }, [userId, refetch]);
 
   const uploadItem = useCallback(
     async (file: File) => {
-      if (!user) throw new Error("Not authenticated");
+      if (!userId) throw new Error("Not authenticated");
 
       const mimeType = inferMimeType(file);
       if (!isSupportedMimeType(mimeType)) {
@@ -181,19 +186,19 @@ export function useWardrobe() {
         setUploading(false);
       }
     },
-    [user, lang, refetch],
+    [userId, lang, refetch],
   );
 
   const deleteItem = useCallback(
     async (item: WardrobeItem) => {
-      if (!user) return;
+      if (!userId) return;
       await executeRef.current.mutateAsync({
         name: "wardrobe.removeItem",
         input: { itemId: item.id },
       });
       await refetch();
     },
-    [user, refetch],
+    [userId, refetch],
   );
 
   return { items, loading, uploading, uploadItem, deleteItem };

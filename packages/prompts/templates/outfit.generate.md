@@ -33,6 +33,7 @@ Return ONLY valid JSON in this exact shape — no markdown, no commentary:
 {
   "outfits": [
     {
+      "name": "Short evocative title in {{locale}} — max 80 characters, e.g. 'Crisp Linen Friday' or 'Velvet & Denim Date'.",
       "items": [
         { "closetItemId": "uuid-from-wardrobe-list", "role": "top" }
       ],
@@ -42,6 +43,7 @@ Return ONLY valid JSON in this exact shape — no markdown, no commentary:
 }
 
 `role` must be one of: "top", "bottom", "dress", "shoes", "outerwear", "accessory".
+`name` is REQUIRED, max 80 characters, no trailing punctuation, written in the user's locale ({{locale}}).
 
 ---
 

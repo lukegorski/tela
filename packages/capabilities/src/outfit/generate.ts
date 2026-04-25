@@ -19,6 +19,7 @@ import { getRequestContext } from '../context/requestContext.js';
 const roleSchema = z.enum(['top', 'bottom', 'dress', 'shoes', 'outerwear', 'accessory']);
 
 const aiOutfitSchema = z.object({
+  name: z.string().min(1).max(80),
   items: z.array(
     z.object({
       closetItemId: z.string().uuid(),
@@ -39,6 +40,7 @@ const input = z.object({
 
 const outfitOutputSchema = z.object({
   outfitId: z.string().uuid(),
+  name: z.string(),
   items: z.array(
     z.object({
       closetItemId: z.string().uuid(),
@@ -189,6 +191,7 @@ export const generateOutfits = registerCapability({
           generationId: result.provenance.generationId,
           contextId,
           rationale: candidate.rationale,
+          name: candidate.name,
           pairingKey,
         })
         .returning({ id: outfits.id });
@@ -203,6 +206,7 @@ export const generateOutfits = registerCapability({
 
       savedOutfits.push({
         outfitId: outfit.id,
+        name: candidate.name,
         items: candidate.items,
         rationale: candidate.rationale,
         pairingKey,

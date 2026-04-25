@@ -17,6 +17,11 @@ const output = z.object({
   costCents: z.number(),
   error: z.string().nullable(),
   asyncStep: z.string().nullable(),
+  /**
+   * The model image URL used for this job. Useful for the UI to show which
+   * model the user picked. Null when no job has been started for this outfit.
+   */
+  model: z.string().nullable(),
 });
 
 /**
@@ -59,6 +64,7 @@ export const getTryOnStatus = registerCapability({
         costCents: 0,
         error: null,
         asyncStep: null,
+        model: null,
       };
     }
 
@@ -78,6 +84,7 @@ export const getTryOnStatus = registerCapability({
       costCents: job.costCents,
       error: job.error,
       asyncStep: job.asyncStep,
+      model: job.modelImageUrl,
     };
   },
 });

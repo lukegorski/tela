@@ -27,8 +27,9 @@ export async function getQueue(): Promise<PgBoss> {
       console.error('[pg-boss]', err);
     });
     await boss.start();
-    // Idempotent — creates the queue if it doesn't exist
+    // Idempotent — creates the queues if they don't exist
     await boss.createQueue(JOB_NAMES.ENHANCE_PHOTO);
+    await boss.createQueue(JOB_NAMES.PROCESS_TRY_ON);
     _boss = boss;
     return boss;
   })();
@@ -50,6 +51,7 @@ export async function closeQueue(): Promise<void> {
  */
 export const JOB_NAMES = {
   ENHANCE_PHOTO: 'enhancement.process',
+  PROCESS_TRY_ON: 'tryon.process',
 } as const;
 
 export interface EnhancePhotoJob {
@@ -57,4 +59,13 @@ export interface EnhancePhotoJob {
   photoId: string;
   /** The userId — used for authorization, rate limit accounting, and event attribution */
   userId: string;
+}
+
+export interface ProcessTryOnJob {
+  /** The try_on_jobs row id (already inserted by the producer with status='pending') */
+  jobId: string;
+  /** The owning user — used for storage path scoping + event attribution */
+  userId: string;
+  /** The outfit being tried on. Drives item lookup + signed-URL minting. */
+  outfitId: string;
 }

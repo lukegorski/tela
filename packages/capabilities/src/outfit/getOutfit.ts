@@ -1,51 +1,27 @@
 import { z } from 'zod';
-import { eq, and } from 'drizzle-orm';
-import { getDb, outfits, outfitItems } from '@tela/db';
 import { logEvent } from '@tela/events';
 import { registerCapability } from '../registry.js';
 import { getRequestContext } from '../context/requestContext.js';
+import { fetchRichOutfits, richOutfitSchema } from './outfitShape.js';
 
 const input = z.object({
   outfitId: z.string().uuid(),
 });
 
-const output = z.object({
-  id: z.string().uuid(),
-  generationId: z.string().uuid(),
-  contextId: z.string().uuid(),
-  rationale: z.string(),
-  pairingKey: z.string(),
-  saved: z.boolean(),
-  wornAt: z.string().nullable(),
-  items: z.array(
-    z.object({
-      closetItemId: z.string().uuid(),
-      role: z.string(),
-    }),
-  ),
-  createdAt: z.string(),
-});
+const output = richOutfitSchema;
 
 export const getOutfit = registerCapability({
   name: 'outfit.get',
   chatTool: true,
-  description: "Fetch a single outfit by ID, including its items, scoped to the requesting user.",
+  description: "Fetch a single outfit by ID with items, signed image URLs, and latest try-on status — scoped to the requesting user.",
   input,
   output,
 
   async execute({ outfitId }) {
     const { userId, source } = getRequestContext();
-    const db = getDb();
 
-    const outfit = await db.query.outfits.findFirst({
-      where: and(eq(outfits.id, outfitId), eq(outfits.userId, userId)),
-    });
+    const [outfit] = await fetchRichOutfits({ userId, outfitId });
     if (!outfit) throw new Error('Outfit not found');
-
-    const items = await db
-      .select({ closetItemId: outfitItems.closetItemId, role: outfitItems.role })
-      .from(outfitItems)
-      .where(eq(outfitItems.outfitId, outfitId));
 
     await logEvent({
       userId,
@@ -54,16 +30,6 @@ export const getOutfit = registerCapability({
       payload: { outfitId },
     });
 
-    return {
-      id: outfit.id,
-      generationId: outfit.generationId,
-      contextId: outfit.contextId,
-      rationale: outfit.rationale,
-      pairingKey: outfit.pairingKey,
-      saved: outfit.saved,
-      wornAt: outfit.wornAt?.toISOString() ?? null,
-      items,
-      createdAt: outfit.createdAt.toISOString(),
-    };
+    return outfit;
   },
 });

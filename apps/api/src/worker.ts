@@ -12,7 +12,12 @@ import {
   runInContext,
   type RequestContext,
 } from '@tela/capabilities';
-import { getQueue, JOB_NAMES, type EnhancePhotoJob } from '@tela/queue';
+import {
+  getQueue,
+  JOB_NAMES,
+  type EnhancePhotoJob,
+  type ProcessTryOnJob,
+} from '@tela/queue';
 import type { Job } from 'pg-boss';
 import { logger } from './logger.js';
 
@@ -49,6 +54,42 @@ async function handleEnhancementJob(jobs: Job<EnhancePhotoJob>[]): Promise<void>
   }
 }
 
+async function handleTryOnJob(jobs: Job<ProcessTryOnJob>[]): Promise<void> {
+  for (const job of jobs) {
+    const { jobId, userId, outfitId } = job.data;
+    const ctx: RequestContext = {
+      userId,
+      source: 'worker',
+      requestId: job.id,
+      isServiceAccount: true,
+    };
+    try {
+      logger.info({ jobId, userId, outfitId }, 'try-on job started');
+      const result = await runInContext(ctx, () =>
+        executeCapability('tryon.process', { jobId, outfitId }),
+      );
+      logger.info({ jobId, outfitId, result }, 'try-on job completed');
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      // The capability already wrote status='failed' to the row before
+      // throwing, so the user-facing UI sees the failure via getStatus.
+      // We log here for ops visibility + Sentry alerting.
+      logger.error(
+        { jobId, userId, outfitId, err: error.message },
+        'try-on job failed',
+      );
+      Sentry.withScope((scope) => {
+        scope.setTag('job', 'tryon.process');
+        scope.setUser({ id: userId });
+        scope.setExtra('outfitId', outfitId);
+        scope.setExtra('tryOnJobId', jobId);
+        Sentry.captureException(error);
+      });
+      throw error;
+    }
+  }
+}
+
 export async function startInProcessWorker(): Promise<void> {
   // Skip in test/eval environments
   if (process.env.SKIP_WORKER === '1') {
@@ -63,7 +104,15 @@ export async function startInProcessWorker(): Promise<void> {
       { batchSize: 1, pollingIntervalSeconds: 5 },
       handleEnhancementJob,
     );
-    logger.info({ jobs: [JOB_NAMES.ENHANCE_PHOTO] }, 'in-process worker started');
+    await queue.work(
+      JOB_NAMES.PROCESS_TRY_ON,
+      { batchSize: 1, pollingIntervalSeconds: 3 },
+      handleTryOnJob,
+    );
+    logger.info(
+      { jobs: [JOB_NAMES.ENHANCE_PHOTO, JOB_NAMES.PROCESS_TRY_ON] },
+      'in-process worker started',
+    );
   } catch (err) {
     // Don't crash the API if the worker fails to start — HTTP can still serve
     const error = err instanceof Error ? err : new Error(String(err));

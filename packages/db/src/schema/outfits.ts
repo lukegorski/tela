@@ -63,9 +63,13 @@ export const outfits = pgTable(
       .notNull()
       .references(() => contexts.id),
     rationale: text('rationale').notNull(),
+    name: varchar('name', { length: 120 }),
+    wardrobeAssessment: text('wardrobe_assessment'),
     pairingKey: varchar('pairing_key', { length: 255 }).notNull(),
     embedding: jsonb('embedding').$type<number[]>(),
     saved: boolean('saved').notNull().default(false),
+    savedAt: timestamp('saved_at', { withTimezone: true }),
+    feedback: varchar('feedback', { length: 10 }),
     wornAt: timestamp('worn_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

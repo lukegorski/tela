@@ -4,3 +4,4 @@
 
 export { generateTryOn } from './generate.js';
 export { getTryOnStatus } from './getStatus.js';
+export { processTryOn } from './process.js';

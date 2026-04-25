@@ -28,6 +28,7 @@ type OutfitEvent =
   | 'outfit.regenerated'
   | 'outfit.viewed' // selective
   | 'outfit.saved'
+  | 'outfit.unsaved' // saved → false; row still exists (vs outfit.deleted = row destroyed)
   | 'outfit.deleted'
   | 'outfit.worn_confirmed'
   | 'outfit.worn_inferred';
@@ -36,7 +37,11 @@ type OutfitEvent =
 type ContextEvent = 'context.assembled' | 'context.occasion_updated';
 
 // Feedback domain (deferred)
-type FeedbackEvent = 'feedback.positive' | 'feedback.negative' | 'feedback.implicit_signal';
+type FeedbackEvent =
+  | 'feedback.positive'
+  | 'feedback.negative'
+  | 'feedback.cleared'
+  | 'feedback.implicit_signal';
 
 // AI domain (cross-cutting, logged by AI gateway)
 type AIEvent = 'ai.generation_completed' | 'ai.generation_failed';

@@ -1,29 +1,158 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #0f0f0f;
-  --muted: #6b7280;
-  --border: #e5e7eb;
-  --accent: #1a1a1a;
-}
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-border: var(--border);
-  --color-accent: var(--accent);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sans: var(--font-inter);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-* {
-  box-sizing: border-box;
+/* Hide scrollbar on horizontal-scroll containers (filter chips) */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Safe area bottom padding for fixed bottom nav (iPhone home indicator) */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Suppress iOS tap highlight flash */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Logo pulse loading animation — opacity only */
+@keyframes logo-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+.animate-logo-pulse {
+  animation: logo-pulse 1.6s ease-in-out infinite;
+}
+
+/* Fade-in for generating step messages */
+@keyframes fade-in {
+  0% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.6s ease-out;
+}
+
+/* Slide-up/down animations for bottom sheets */
+@keyframes slide-up {
+  0% { transform: translateY(100%); }
+  100% { transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+@keyframes slide-down {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(100%); }
+}
+.animate-slide-down {
+  animation: slide-down 0.25s ease-in forwards;
+}
+@keyframes fade-out {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-fade-out {
+  animation: fade-out 0.25s ease-in forwards;
+}
+
+/* Shimmer loading animation for try-on generation */
+.shimmer-bg {
+  background: linear-gradient(
+    110deg,
+    #2a2a2a 30%,
+    #3a3a3a 50%,
+    #2a2a2a 70%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Bottom sheet animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes slideRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slideLeft {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+/* Panel sub-view transitions (subtle 30% slide) */
+@keyframes panelSlideInFromRight {
+  from { transform: translateX(30%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes panelSlideInFromLeft {
+  from { transform: translateX(-30%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.panel-slide-forward {
+  animation: panelSlideInFromRight 250ms ease-out;
+}
+.panel-slide-backward {
+  animation: panelSlideInFromLeft 250ms ease-out;
+}
+
+/* Ken Burns zoom for login carousel */
+@keyframes ken-burns {
+  from { transform: scale(1); }
+  to { transform: scale(1.10); }
+}
+
+/* ── Mobile page transitions ── */
+
+@keyframes page-slide-in-from-right {
+  from { transform: translateX(100%); }
+}
+@keyframes page-slide-in-from-left {
+  from { transform: translateX(-100%); }
+}
+
+@media (max-width: 639px) {
+  .page-slide-left {
+    animation: page-slide-in-from-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .page-slide-right {
+    animation: page-slide-in-from-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+</content>
+</invoke>

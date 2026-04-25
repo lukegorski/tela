@@ -16,7 +16,9 @@
     "db:generate": "turbo db:generate --filter=@tela/db",
     "db:migrate": "turbo db:migrate --filter=@tela/db",
     "db:push": "turbo db:push --filter=@tela/db",
-    "prompts:sync": "turbo prompts:sync --filter=@tela/prompts"
+    "prompts:sync": "turbo prompts:sync --filter=@tela/prompts",
+    "verify": "pnpm --filter @tela/db build && pnpm --filter @tela/capabilities build && pnpm --filter @tela/api typecheck && pnpm --filter @tela/web typecheck && bash scripts/check-no-residue.sh",
+    "verify:no-residue": "bash scripts/check-no-residue.sh"
   },
   "devDependencies": {
     "turbo": "^2.5.0",

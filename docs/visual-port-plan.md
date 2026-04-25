@@ -156,73 +156,245 @@ preview is intricate — copy it carefully.
 
 ## Phase D.7 — Outfits + outfit detail
 
-**Legacy files:**
-- `src/app/(main)/[lang]/outfits/page.tsx`
-- `src/app/(main)/[lang]/outfits/[id]/page.tsx`
+**Largest port to date.** The legacy `outfits/page.tsx` is 877 lines
+with 3 grid modes, snap-y hero feed, swipe gestures, deep-linking,
+filter + generate + pieces + model-picker BottomSheets, and inline
+client-side try-on orchestration. Plus a separate `/outfits/[id]`
+deep-link route. Plus 4 substantial components.
 
-### Dependencies (read these first)
+**Reasonable scope split** (the new session decides at a natural
+break — not pre-decided):
+- D.7a — schema + capability refactor (outfitShape.ts, async try-on
+  refactor, fix the 5 latent bugs listed below).
+- D.7b — frontend (page + 4 components + useOutfits + detail page +
+  delete MVP).
+- Or one D.7 commit if the scope feels manageable end-to-end.
 
-- `src/hooks/useOutfits.ts` (if exists, else queries inline)
-- `src/components/OutfitCard.tsx`
-- `src/components/OutfitHero.tsx`
-- `src/components/OutfitGridCell.tsx`
-- `src/components/OutfitPiecesSheet.tsx`
-- `src/lib/outfits.ts`
+### Legacy files (READ-ONLY visual + behavior spec)
 
-### Capability decisions
+- `src/app/(main)/[lang]/outfits/page.tsx`         (877 lines)
+- `src/app/(main)/[lang]/outfits/[id]/page.tsx`    (76 lines)
+- `src/components/OutfitCard.tsx`                  (198 lines)
+- `src/components/OutfitGridCell.tsx`              (184 lines, memo'd)
+- `src/components/OutfitHero.tsx`                  (223 lines, memo'd)
+- `src/components/OutfitPiecesSheet.tsx`           (183 lines)
+- `src/lib/outfits.ts`                             (17 lines — just `deleteOutfit`)
+- `src/lib/types.ts:93` — the legacy `Outfit` interface
 
-Likely need:
-- Extend `outfit.list` or add `outfit.listForGrid` returning items with
-  signed image URLs + try-on status + saved status.
-- `outfit.feedback({ outfitId, feedback: 'up' | 'down' })` — new
-  capability if not already present (legacy stores per-outfit
-  thumbs-up/down).
+There is **no `useOutfits` hook in legacy** — queries are inline in
+`page.tsx` via Firestore `onSnapshot`. The new app needs to build
+`useOutfits` from scratch (mirror `useWardrobe` pattern from D.6).
 
-### Try-on integration
+### Reused from earlier ports (do NOT reinvent)
 
-Outfit detail shows try-on result inline (legacy uses `OutfitHero`
-overlay). Our `tryon.generate` + `tryon.getStatus` capabilities
-already exist (Phase 10 MVP). The frontend wiring in this phase is
-swapping our `TryOnButton` MVP for the legacy hero overlay pattern.
+| Surface | Source |
+|---|---|
+| `BottomSheet`, `LoadingSpinner`, `ColorSwatch`, `ProtectedRoute`, `useAuthContext`, `useDictionary` | D.4 chrome |
+| `ColorFilterChips` | D.6 wardrobe |
+| `useScrollPersistence` | D.6 prep |
+| `RichItem` shape pattern | D.6 (`wardrobe/itemShape.ts`) — mirror as `outfit/outfitShape.ts` |
 
-### Data shape gaps
+### Latent bugs to fix in D.7 (discovered during prep audit)
 
-Legacy `Outfit` type:
-- `items: string[]` (just IDs, denormalized via `itemImages`)
-- `itemImages: string[]`
-- `reasoning: string`
-- `name?: string`
-- `occasion: string`
-- `season: string[]`
-- `saved: boolean`
-- `feedback: 'up' | 'down' | null`
-- `tryOnImageURL`, `tryOnStatus`, `tryOnAsyncJobId`, `tryOnAsyncStep`
-- `model?: string` (try-on model)
-- `wardrobeAssessment?: string` (cofounder's commentary on the outfit)
-- `translations`, `itemSnapshots`
+These are bugs in the *current* new-app code (not in the legacy app)
+that surface when wiring the legacy UI. Roll into D.7 scope:
 
-Our schema has:
-- `outfits.id, user_id, generation_id, context_id, rationale,
-  pairing_key, embedding, saved, worn_at, created_at`
-- `outfit_items.outfit_id, closet_item_id, role`
-- Plus `try_on_jobs` for try-on state
+1. **`outfit.save` emits the wrong event type when unsaving.**
+   `packages/capabilities/src/outfit/saveOutfit.ts:38` logs
+   `'outfit.deleted'` when `saved: false` — but the row isn't
+   deleted, it's just unsaved. Misleads the inference layer. Fix:
+   add `'outfit.unsaved'` (or similar) to the event taxonomy and
+   emit that instead. Keep `'outfit.deleted'` strictly for
+   row-destruction.
 
-Gaps:
-- `feedback`: not in schema. Add `outfits.feedback` column (enum/varchar),
-  add `outfit.setFeedback` capability.
-- `name`: not in schema. Add `outfits.name varchar(120)` (nullable) or
-  just compute from items.
-- `wardrobeAssessment`: not in schema. Add column or skip the UI bit.
-- `season`: outfits don't have seasons in our schema (context does).
-  Skip; UI accommodates empty.
-- `tryOn*` fields: come from `try_on_jobs` join.
+2. **`outfit.delete` leaks Supabase Storage objects.**
+   `packages/capabilities/src/outfit/deleteOutfit.ts` deletes the
+   row + relies on FK cascade for `outfit_items` and `try_on_jobs`,
+   but does not delete the try-on result image objects from the
+   `try-on-results` bucket. Legacy `lib/outfits.ts` does best-effort
+   `deleteObject` for these. Fix: enumerate cascaded
+   `try_on_jobs.result_storage_path` values, delete from Storage
+   best-effort, then delete the outfit row. Wrap in a transaction
+   (D.6 pattern).
 
-### Files to delete after port
+3. **`tryon.generate` is synchronous-blocking.**
+   `packages/capabilities/src/tryon/generate.ts` polls Fashn ~30–90s
+   before returning. CANNOT be called from a tRPC button-click
+   mutation — the client times out. Legacy UI fires-and-forgets and
+   polls. Fix: refactor to enqueue via `@tela/queue` (pg-boss
+   already in repo) and return `jobId` immediately. The pg-boss
+   worker in apps/api executes the pipeline and updates the
+   `try_on_jobs` row. Frontend polls `tryon.getStatus` every 2-3s
+   while status='running'. (Layered top+bottom+outerwear pipelines
+   stay deferred; same as today.)
 
-- `apps/web/src/components/outfits/*` (my MVP cards, buttons,
-  TryOnButton)
+4. **`tryon.generate` hardcodes a Firebase Storage model URL.**
+   `generate.ts:50-51` defines
+   `DEFAULT_MODEL_URL = 'https://firebasestorage.googleapis.com/.../woman.jpg'`.
+   Wrong twice over: ignores `users.try_on_settings.model` (already
+   added to schema), and is a Firebase URL on the new stack. Fix:
+   read the user's settings, map `'model-woman' | 'model-man'` to
+   Supabase-hosted model image URLs (port the model JPGs to
+   Supabase Storage as part of D.7 if they're not there yet), and
+   honor the user's choice. (`'self'` stays disabled — same as
+   D.4 try-on settings.)
+
+5. **`tryon.getStatus` doesn't return `model`.**
+   Legacy `Outfit` has a `model?: string` field that the UI may
+   surface. Add `model: string | null` to the output schema, sourced
+   from `try_on_jobs.model_image_url`.
+
+### Schema changes
+
+Migration `0011_*.sql` adds to `outfits`:
+
+| Column | Type | Notes |
+|---|---|---|
+| `feedback` | `varchar(10)` nullable | 'up' \| 'down' \| null |
+| `saved_at` | `timestamp with timezone` nullable | when `saved` flipped to true |
+| `name` | `varchar(120)` nullable | source TBD — see decision (2) below |
+| `wardrobe_assessment` | `text` nullable | source TBD — see decision (2) below |
+
+No new tables. No changes to `outfit_items` or `try_on_jobs`.
+
+### New / changed capabilities
+
+| Capability | Change |
+|---|---|
+| `outfit/outfitShape.ts` | NEW — `fetchRichOutfits({ userId, outfitId?, savedOnly?, limit, offset })`. Joins outfits → outfit_items → closet_items → item_photos (signed URLs) → try_on_jobs (latest, for status + resultUrl + asyncStep + model) → contexts (occasion, season). Returns `RichOutfit[]`. Mirror `wardrobe/itemShape.ts`. |
+| `outfit.list` | Replace lightweight shape with `RichOutfit[]` from `fetchRichOutfits`. Keep `savedOnly` + pagination input. |
+| `outfit.get` | Replace with `fetchRichOutfits({ outfitId })[0]`. Keep `outfit.viewed` event. |
+| `outfit.save` | Update to also write `saved_at`. Fix event-type bug above. |
+| `outfit.delete` | Add Supabase Storage cleanup (see bug #2 above). Wrap in a Drizzle transaction. |
+| `outfit.setFeedback` | NEW — `{ outfitId, feedback: 'up' \| 'down' \| null }`. Idempotent. Emits `feedback.positive` / `feedback.negative` / `feedback.cleared` (event taxonomy may need an addition). |
+| `tryon.generate` | Refactor to enqueue (pg-boss) + return `jobId` immediately. Read `users.try_on_settings.model` for model URL. |
+| `tryon.getStatus` | Add `model` to output schema. |
+
+Add to event taxonomy (`packages/events/src/types.ts`):
+- `'outfit.unsaved'` — outfit was un-saved (saved → false), row still exists.
+- (Confirm whether `feedback.cleared` already exists or needs adding.)
+
+### Generate flow (frontend orchestration)
+
+Legacy `/api/outfits/generate` was a single endpoint that built
+context server-side. Our equivalent is **two tRPC calls from the
+frontend, in sequence**:
+
+```
+context.assemble({ occasion })  →  { contextId }
+outfit.generate({ contextId, count: 1 })  →  { outfits: [...] }
+```
+
+Don't add a wrapper capability. The two-step pattern is fine — it
+exposes the assembled context to the UI for display + caching.
+
+### Outfit detail surfacing
+
+Port BOTH:
+- **Inline `BottomSheet`** with `OutfitPiecesSheet` for grid taps
+  in the list page (fast browsing).
+- **Standalone `/outfits/[id]/page.tsx`** route (rename my MVP
+  `/[outfitId]` → `/[id]` to match legacy URL pattern). Renders
+  `OutfitCard` with `showDetail` prop. Used for deep links.
+
+### Try-on UX (frontend)
+
+- Three display states per outfit cell/hero: try-on image, item-grid
+  fallback, "Try on" / "Retry" CTA overlay. Loading spinner overlay
+  during `status='running'`.
+- Polling: `tryon.getStatus({ outfitId })` every 2-3s while
+  `status='running'`. Stop on `complete` | `failed`.
+- Resume on page reload: list any outfits whose `try_on_jobs.status
+  IN ('pending','running')` and resume polling. (Mirror legacy's
+  resume-on-mount logic.)
+- First-time model picker (if `!profile.onboardingComplete`):
+  force-pick model-woman / model-man (self disabled "coming
+  soon"), then write `users.try_on_settings` + flip
+  `onboarding_complete = true` via `user.completeOnboarding` (or
+  a new dedicated capability).
+
+### Real-time / refresh strategy
+
+- Outfits list: refetch on mutation success (generate / save /
+  delete / setFeedback) via `utils.outfit.list.invalidate()`.
+  Optimistic insert on generate (mirror legacy).
+- Try-on status: polling (above).
+- No Supabase Realtime in D.7 — defer to a later phase.
+
+### UI behaviors that must not be dropped
+
+- 3 grid modes (1=hero snap-y, 2-col, 3-col) persisted in
+  `localStorage["outfits-grid-mode"]`.
+- Touch swipe-back gesture (right-edge swipe).
+- `?id=` deep-link → switch to hero, scroll to outfit.
+- Suspense wrapper (required for `useSearchParams`).
+- Filter sheet with dynamic occasion list (only occasions present
+  in current outfits).
+- Generate sheet (occasion picker, generates 1).
+- Optimistic outfit insertion + "scroll to top" after generate.
+- Resume in-flight try-on pipelines on page reload.
+- Memoized `OutfitGridCell` and `OutfitHero` — keep memo signatures
+  matching legacy.
+
+### i18n keys
+
+Add to all 14 dictionaries (`apps/web/src/dictionaries/*.json`).
+The OnboardingForm port (commit `a4482de`) is the pattern. Keys
+needed (from the 4 legacy components + page):
+- `dict.outfits.{tryOn, retryTryOn, deleteOutfit, saveToLookbook,
+  savedToLookbook, goodOutfit, notMyStyle, pieces,
+  generateAnOutfit, generatePrompt, wardrobeEmpty,
+  somethingWentWrong, outfitNotFound, category}`
+- `dict.constants.{occasionOptions.*, seasonOptions.*, categories.*}`
+  (likely already partly there from D.5 / D.6).
+- `dict.onboarding.selectYourModel`
+- `dict.settings.{modelWoman, modelMan, modelMe, comingSoon}`
+- `dict.common.{all, back, save, cancel, delete}`
+
+### Files to delete (in the same commit as the port)
+
+- `apps/web/src/components/outfits/{DeleteOutfitButton,
+  GenerateOutfitsButton, OutfitCard, SaveOutfitButton,
+  TryOnButton}.tsx` (5 MVP components — completely replaced).
+- `apps/web/src/app/(main)/[lang]/outfits/[outfitId]/page.tsx`
+  (MVP detail page — replaced by `[id]/page.tsx` ported from
+  legacy).
 - `apps/web/src/lib/outfits.ts`, `apps/web/src/lib/outfit-detail.ts`
-  (server helpers redundant)
+  (if they exist as server helpers — verify before deleting).
+
+### Decisions Luke must make BEFORE coding starts
+
+(These are surfaced upfront because they're load-bearing for the
+schema + capability shape. Don't pick silently.)
+
+1. **Async try-on refactor**: confirm the pg-boss enqueue pattern
+   for `tryon.generate` (recommended). Alternative: split into
+   `tryon.start` + `tryon.advance` and orchestrate from the
+   frontend (closer to legacy structure but more client logic).
+
+2. **`name` and `wardrobe_assessment` source**: who sets these?
+   - `name`: AI at generation time (extend the
+     `outfit.generate` prompt to return it)? User-editable? Or
+     just compute fallback from first item category?
+   - `wardrobe_assessment`: cofounder via admin (new admin UI)?
+     AI at generation time? Skip for D.7 (column added but unused)?
+
+3. **Item-delete resilience**: D.6 chose to cascade-delete outfits
+   when their items go away. Legacy denormalized `itemImages` so
+   outfits survive item deletes (lookbook = full historical
+   record). Stick with D.6's cascade (recommended), or revisit?
+
+4. **Outfit-detail dual surfacing**: confirm we port BOTH the
+   inline BottomSheet AND the standalone `/outfits/[id]` route
+   (recommended — fast browsing + shareable URLs).
+
+### Admin intersection (light follow-up)
+
+`packages/capabilities/src/admin/getUserDetail.ts:153–160` reads
+outfits `(id, rationale, saved, createdAt)`. Won't break with the
+new columns. Optional D.7 polish: surface `feedback`, `saved_at`,
+`name` in the admin user-detail page. Not required for D.7 to
+ship.
 
 ---
 

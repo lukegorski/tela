@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { localePath } from '@/lib/i18n';
-import { useDictionary } from '@/lib/i18n/DictionaryProvider';
+import { useDictionary } from '@/components/DictionaryProvider';
 import { PlusIcon, HangerIcon, ChatBubbleIcon, PersonIcon } from './icons';
 
 /**

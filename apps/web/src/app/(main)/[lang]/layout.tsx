@@ -28,7 +28,7 @@ import { Inter } from 'next/font/google';
 import { notFound } from 'next/navigation';
 import { isLocale, locales } from '@/lib/i18n';
 import { getDictionary } from '@/dictionaries';
-import { DictionaryProvider } from '@/lib/i18n/DictionaryProvider';
+import { DictionaryProvider } from '@/components/DictionaryProvider';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { AuthProvider } from '@/components/AuthProvider';
 import PageTransitionProvider, {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
-import { getDb, users, DEFAULT_TRY_ON_SETTINGS } from '@tela/db';
+import { getDb, users, styleProfiles, DEFAULT_TRY_ON_SETTINGS } from '@tela/db';
 import { registerCapability } from '../registry.js';
 import { getRequestContext } from '../context/requestContext.js';
 
@@ -27,6 +27,13 @@ const output = z.object({
   onboardingComplete: z.boolean(),
   hasLocation: z.boolean(),
   /**
+   * True when a style_profiles row exists for the user (i.e., the closet
+   * read has been generated at least once). Replaces the legacy
+   * `profile.styleDna` truthy-check used in the landing page's
+   * post-sign-in routing logic.
+   */
+  hasStyleProfile: z.boolean(),
+  /**
    * Try-on rendering preferences. Defaults applied when the user hasn't
    * touched the settings UI yet — saves the frontend from null-checks.
    */
@@ -50,9 +57,13 @@ export const whoami = registerCapability({
   async execute() {
     const { userId, source, isServiceAccount } = getRequestContext();
     const db = getDb();
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, userId),
-    });
+    const [user, profile] = await Promise.all([
+      db.query.users.findFirst({ where: eq(users.id, userId) }),
+      db.query.styleProfiles.findFirst({
+        where: eq(styleProfiles.userId, userId),
+        columns: { id: true },
+      }),
+    ]);
     if (!user) {
       throw new Error('User record not found for authenticated context');
     }
@@ -68,6 +79,7 @@ export const whoami = registerCapability({
       isAdmin: user.isAdmin,
       onboardingComplete: user.onboardingComplete,
       hasLocation: user.location !== null,
+      hasStyleProfile: profile != null,
       tryOnSettings: user.tryOnSettings ?? DEFAULT_TRY_ON_SETTINGS,
     };
   },

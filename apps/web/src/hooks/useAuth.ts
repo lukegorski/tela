@@ -66,6 +66,13 @@ export interface AuthProfile {
   isAdmin: boolean;
   onboardingComplete: boolean;
   hasLocation: boolean;
+  /**
+   * True when the user has a style_profiles row (closet read has run).
+   * The legacy app's landing page used `profile.styleDna` truthy-check;
+   * we map that concept to the new architecture's prose-based style
+   * profile (created by profile.closetRead).
+   */
+  hasStyleProfile: boolean;
   tryOnSettings: AuthTryOnSettings;
 }
 
@@ -108,6 +115,7 @@ export function useAuth(): UseAuthReturn {
         isAdmin: boolean;
         onboardingComplete: boolean;
         hasLocation: boolean;
+        hasStyleProfile: boolean;
         tryOnSettings: AuthTryOnSettings;
       };
       const p: AuthProfile = {
@@ -120,6 +128,7 @@ export function useAuth(): UseAuthReturn {
         isAdmin: result.isAdmin,
         onboardingComplete: result.onboardingComplete,
         hasLocation: result.hasLocation,
+        hasStyleProfile: result.hasStyleProfile,
         tryOnSettings: result.tryOnSettings,
       };
       // Sync locale cookie so server components (RSC layouts, dictionary

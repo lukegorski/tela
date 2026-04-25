@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { localePath } from '@/lib/i18n';
-import { useDictionary } from '@/lib/i18n/DictionaryProvider';
+import { useDictionary } from '@/components/DictionaryProvider';
 
 /**
  * Top navbar shown on desktop. Hidden on mobile (MobileNav takes over).

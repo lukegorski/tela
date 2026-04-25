@@ -44,6 +44,18 @@ export interface AuthTryOnSettings {
 }
 
 /**
+ * User's saved location. Mirrors legacy `UserProfile.location`.
+ */
+export interface AuthLocation {
+  city: string;
+  country?: string;
+  lat: number;
+  lon: number;
+  timezone: string;
+  tempUnit: 'C' | 'F';
+}
+
+/**
  * Canonical app-side profile, matching the structure the legacy
  * components expect on the `profile` field — but sourced from our
  * Postgres `users` row plus related tables (style_profiles for styleDna,
@@ -66,6 +78,11 @@ export interface AuthProfile {
   isAdmin: boolean;
   onboardingComplete: boolean;
   hasLocation: boolean;
+  /**
+   * Full location object when set; null otherwise. Components access
+   * `profile.location` directly (matches legacy).
+   */
+  location: AuthLocation | null;
   /**
    * True when the user has a style_profiles row (closet read has run).
    * The legacy app's landing page used `profile.styleDna` truthy-check;
@@ -115,6 +132,7 @@ export function useAuth(): UseAuthReturn {
         isAdmin: boolean;
         onboardingComplete: boolean;
         hasLocation: boolean;
+        location: AuthLocation | null;
         hasStyleProfile: boolean;
         tryOnSettings: AuthTryOnSettings;
       };
@@ -128,6 +146,7 @@ export function useAuth(): UseAuthReturn {
         isAdmin: result.isAdmin,
         onboardingComplete: result.onboardingComplete,
         hasLocation: result.hasLocation,
+        location: result.location,
         hasStyleProfile: result.hasStyleProfile,
         tryOnSettings: result.tryOnSettings,
       };

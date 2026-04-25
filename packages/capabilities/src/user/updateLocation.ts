@@ -7,7 +7,8 @@ import { getRequestContext } from '../context/requestContext.js';
 
 const input = z.object({
   city: z.string().min(1).max(100),
-  country: z.string().min(1).max(100),
+  /** Optional — not all geocoders return a country. */
+  country: z.string().min(1).max(100).optional(),
   lat: z.number().min(-90).max(90),
   lon: z.number().min(-180).max(180),
   timezone: z.string().min(1).max(64),

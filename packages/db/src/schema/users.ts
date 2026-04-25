@@ -22,7 +22,10 @@ export interface UserBodyInfo {
 
 export interface UserLocation {
   city: string;
-  country: string;
+  /** Optional — Open-Meteo geocoding returns it; the legacy app stores it
+   * conditionally. Allowing absent keeps the shape interoperable with
+   * both paths. */
+  country?: string;
   lat: number;
   lon: number;
   timezone: string;

@@ -12,6 +12,15 @@ const tryOnSettingsSchema = z.object({
   selfPhotoURL: z.string().nullable(),
 });
 
+const locationSchema = z.object({
+  city: z.string(),
+  country: z.string().optional(),
+  lat: z.number(),
+  lon: z.number(),
+  timezone: z.string(),
+  tempUnit: z.enum(['C', 'F']),
+});
+
 const output = z.object({
   userId: z.string().uuid(),
   email: z.string().nullable(),
@@ -26,6 +35,11 @@ const output = z.object({
   // Onboarding state — drives whether the frontend routes to /onboarding
   onboardingComplete: z.boolean(),
   hasLocation: z.boolean(),
+  /**
+   * Full location object when the user has set one, null otherwise.
+   * Components consume `profile.location` directly (legacy compat).
+   */
+  location: locationSchema.nullable(),
   /**
    * True when a style_profiles row exists for the user (i.e., the closet
    * read has been generated at least once). Replaces the legacy
@@ -79,6 +93,7 @@ export const whoami = registerCapability({
       isAdmin: user.isAdmin,
       onboardingComplete: user.onboardingComplete,
       hasLocation: user.location !== null,
+      location: user.location ?? null,
       hasStyleProfile: profile != null,
       tryOnSettings: user.tryOnSettings ?? DEFAULT_TRY_ON_SETTINGS,
     };

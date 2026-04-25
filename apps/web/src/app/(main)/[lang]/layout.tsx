@@ -1,27 +1,23 @@
 /**
- * Root layout for the (main) route group — every public + signed-in user
- * surface lives under this. Defines <html><body> directly because Next 16
- * supports per-route-group root layouts via parallel routes.
+ * Root layout for the (main) route group. Multi-root: defines its own
+ * <html><body> because Next 16 supports per-route-group root layouts via
+ * parallel routes.
  *
- * Mirrors the legacy `src/app/(main)/[lang]/layout.tsx` provider stack so
- * ported components find what they expect:
+ * Pixel-perfect port of legacy src/app/(main)/[lang]/layout.tsx with the
+ * data layer swapped to our stack:
  *   - Inter font on --font-inter (consumed by globals.css)
- *   - Theme bootstrap script (avoids dark-mode flash)
- *   - DictionaryProvider, ThemeProvider, AuthProvider, PageTransitionProvider
- *   - Navbar / MobileNav are intentionally NOT rendered here yet — Phase D
- *     ports the legacy versions and wires them in. Until then pages render
- *     without chrome (the legacy chrome relies on settings panels we
- *     haven't ported yet).
+ *   - Inline theme bootstrap script (avoids dark-mode FOUC)
+ *   - Provider stack: TRPCProvider > DictionaryProvider > ThemeProvider
+ *     > AuthProvider > PageTransitionProvider
+ *   - Navbar (desktop) + MobileNav (mobile bottom tab bar)
  *
- * No requireAuth() at this layer — the landing page handles signed-out
- * users (shows login UI), and other pages call requireAuth() themselves.
- * The legacy app uses the same pattern (its <ProtectedRoute> wraps each
- * authed route individually).
+ * No requireAuth() at this layer — landing page handles signed-out users;
+ * other pages call requireAuth() themselves. Mirrors legacy's
+ * <ProtectedRoute> per-page pattern.
  *
- * The new tRPC + Supabase stack lives alongside legacy-shaped providers:
- * TRPCProvider gives all consumers (including ported components) the
- * trpc client; AuthProvider's underlying useAuth() is Supabase-native.
- * Zero firebase imports.
+ * Zero firebase imports. AuthProvider is Supabase-backed; TRPCProvider
+ * gives ported components access to tRPC mutations against our
+ * capability layer.
  */
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
@@ -34,6 +30,8 @@ import { AuthProvider } from '@/components/AuthProvider';
 import PageTransitionProvider, {
   PageTransitionWrapper,
 } from '@/components/PageTransitionProvider';
+import Navbar from '@/components/Navbar';
+import MobileNav from '@/components/MobileNav';
 import { TRPCProvider } from '@/trpc/Provider';
 import '../../globals.css';
 
@@ -93,9 +91,11 @@ export default async function MainRootLayout({
             <ThemeProvider>
               <AuthProvider>
                 <PageTransitionProvider>
+                  <Navbar />
                   <main className="flex-1 pb-16 sm:pb-0 overflow-x-hidden">
                     <PageTransitionWrapper>{children}</PageTransitionWrapper>
                   </main>
+                  <MobileNav />
                 </PageTransitionProvider>
               </AuthProvider>
             </ThemeProvider>

@@ -62,6 +62,84 @@ export interface ImageDimensions {
   height: number;
 }
 
+/**
+ * One piece inside an outfit. Mirrors the `richOutfitItemSchema` returned
+ * by outfit.list / outfit.get / outfit.save / outfit.setFeedback.
+ *
+ * Has everything needed to render the item-grid fallback, color-filter
+ * chips, and the pieces sheet without a second wardrobe round-trip.
+ */
+export interface OutfitItem {
+  closetItemId: string;
+  /** "top" | "bottom" | "dress" | "outerwear" | "shoes" | "accessory" */
+  role: string;
+  category: string;
+  subcategory: string | null;
+  primaryColor: string;
+  secondaryColor: string | null;
+  backgroundColor: string | null;
+  imageUrl: string | null;
+  originalImageUrl: string | null;
+}
+
+/**
+ * Latest try-on job for an outfit. `null` when no job has ever been
+ * started (first visit / never tapped Try On). Status follows the
+ * worker-side state machine: pending → running → complete | failed.
+ */
+export interface OutfitTryOn {
+  jobId: string;
+  status: 'pending' | 'running' | 'complete' | 'failed';
+  resultUrl: string | null;
+  costCents: number;
+  error: string | null;
+  /** Layered pipeline step ('bottoms'|'top'|'outerwear'|'dress'); always null for the dress + standard pipelines. */
+  asyncStep: 'bottoms' | 'top' | 'outerwear' | 'dress' | null;
+  model: string | null;
+}
+
+export interface OutfitTranslation {
+  rationale?: string;
+  name?: string;
+  wardrobeAssessment?: string;
+}
+
+/**
+ * Full outfit shape — what useOutfits returns and what the legacy ports
+ * (OutfitGridCell, OutfitHero, OutfitPiecesSheet, OutfitCard) consume.
+ *
+ * Mirrors the capability `richOutfitSchema`. Single `season` (was string[]
+ * in legacy — we collapsed to one tag because contexts.season is single).
+ * Translations field is empty for now (translation capability deferred).
+ */
+export interface Outfit {
+  id: string;
+  generationId: string;
+  contextId: string;
+  rationale: string;
+  name: string | null;
+  wardrobeAssessment: string | null;
+  pairingKey: string;
+  occasion: string;
+  season: string;
+  saved: boolean;
+  savedAt: string | null;
+  feedback: 'up' | 'down' | null;
+  wornAt: string | null;
+  createdAt: string;
+  items: OutfitItem[];
+  tryOn: OutfitTryOn | null;
+  translations?: Record<string, OutfitTranslation>;
+}
+
+export const OCCASION_OPTIONS = [
+  'Everyday',
+  'Work',
+  'Date Night',
+  'Formal',
+  'Weekend',
+] as const;
+
 export const CATEGORY_FILTERS = [
   "All",
   "Tops",

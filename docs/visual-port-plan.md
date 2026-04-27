@@ -600,51 +600,445 @@ before testing.
 
 ## Phase D.9 — Chat (and switch to our SSE endpoint)
 
-**Legacy files:**
-- `src/app/(main)/[lang]/chat/page.tsx`
-- `src/components/ChatComposer.tsx`
-- `src/components/ChatMessage.tsx`
-- `src/components/ChatItemGrid.tsx`
-- `src/components/ChatOutfitGrid.tsx`
-- `src/components/ChatWardrobePicker.tsx`
-- `src/hooks/useChat.ts`
+**Largest port yet. ~1500 lines net added across two commits.**
+Land as D.9a (backend) + D.9b (frontend) at minimum.
 
-### Streaming swap
+### Legacy files (READ-ONLY visual + behavior spec)
 
-Legacy: NDJSON over POST `/api/chat`.
-Ours: SSE at POST `/chat/stream` (already built — see `apps/api/src/chatStream.ts`).
+- `src/app/(main)/[lang]/chat/page.tsx` (868 lines — biggest single file)
+- `src/components/ChatComposer.tsx` (244)
+- `src/components/ChatMessage.tsx` (132)
+- `src/components/ChatItemGrid.tsx` (81)
+- `src/components/ChatOutfitGrid.tsx` (113)
+- `src/components/ChatWardrobePicker.tsx` (109)
+- `src/hooks/useChat.ts` (335)
 
-Already have a partial port at
-`apps/web/src/components/chat/ChatComposer.tsx` (my MVP) that consumes
-SSE. That logic is reusable; the rest of the chat ecosystem
-(`ChatMessage`, `ChatItemGrid`, `ChatOutfitGrid`,
-`ChatWardrobePicker`) needs porting.
+**DO NOT PORT** (replaced by our architecture):
 
-### Tool dispatch differences
+- `src/lib/chat-tools.ts` (1567 lines of Firebase tool handlers —
+  capability auto-discovery REPLACES this)
+- `src/app/api/chat/route.ts` (NDJSON endpoint — our SSE replaces)
+- `src/components/AdminAiChat.tsx` (legacy admin chat — our admin
+  tooling replaces)
 
-Legacy chat had 12 hardcoded tools. Our chat does
-capability-as-tool auto-discovery (`chatTool: true` opt-in flag).
-Tools the model can call:
-- wardrobe.listItems, wardrobe.getItem, wardrobe.removeItem
-- outfit.generate, outfit.list, outfit.get, outfit.save, outfit.delete
-- profile.get, profile.closetRead
-- context.assemble
+### Reused from earlier ports — DO NOT MODIFY
 
-The chat UI's tool-invocation badges should render the same way
-legacy does (small inline status messages); see existing
-`ChatComposer` MVP for the pattern.
+| Surface | Source |
+|---|---|
+| `OutfitPiecesSheet`, `ItemDetailContent` | D.7b / D.6 |
+| `BottomSheet`, `LoadingSpinner`, `ProtectedRoute`, `ColorSwatch` | D.4 |
+| `useScrollPersistence` (key: `"chat-scroll"`) | D.6 prep |
+| `useWardrobe` (used by `ChatWardrobePicker`) | D.6 |
+| `useAuthContext`, `useDictionary` | D.4 |
+| `wardrobe.requestPhotoUpload` + `wardrobe.confirmPhotoUpload` | already wired — chat composer reuses for photo attachments |
+| `item.analyze` + `wardrobe.addItem` | already wired — LLM calls these to add a chat photo to the wardrobe |
 
-### Attachment upload
+### Architectural decisions (locked, don't revisit)
 
-Legacy supports image attachments in chat. Need to port the
-attachment flow (upload to Storage → reference in message →
-AI vision processes). Our `wardrobe.requestPhotoUpload` flow can be
-reused with a different bucket prefix.
+1. **In-chat onboarding flow → DROP entirely.** Trigger
+   `!profile.styleDna` doesn't fire in our flow (D.5 quiz handles
+   language + body info + lifestyle; closet read replaces style DNA).
+   Replace ~200 lines of legacy onboarding JSX with a single code
+   comment in the new page. Same precedent as the D.7 model picker
+   skip.
+
+2. **Vision content type → ADD a parallel `contentParts` field**
+   to `@tela/ai`'s `ChatMessage`, do NOT widen `content`.
+   The original v3 plan widened `content: string | null` →
+   `content: string | null | Array<...>`, but that breaks
+   `streamChatTurn`'s `assistantContent = msg.content ?? ''` (which
+   then gets persisted to a `text` column → DB error). Cleaner type:
+
+   ```typescript
+   interface ChatMessage {
+     role: 'system' | 'user' | 'assistant' | 'tool';
+     content: string | null;                          // unchanged
+     contentParts?: Array<                            // NEW — user-only multipart
+       | { type: 'text'; text: string }
+       | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } }
+     >;
+     toolCallId?: string;
+     toolCalls?: ToolCall[];
+   }
+   ```
+
+   `providers/openai.ts:chatMulti` + `chatMultiStream` check
+   `if (m.contentParts)` and use that, else use `m.content`. Smaller
+   blast radius. Existing string callers untouched. Assistant /
+   system / tool messages keep emitting `content` only (they never
+   need multipart in practice).
+
+3. **Wardrobe item attachment context → APPEND to user message.**
+   When a user attaches `[{ type: 'wardrobe_item', itemId: 'xyz' }]`,
+   resolve item descriptions server-side (in `streamChatTurn`) and
+   append to the user text:
+   ```
+   ${input.message}
+   
+   [Attached wardrobe items: navy wool sweater (id: abc), black leather boots (id: xyz)]
+   ```
+   Predictable, no extra round-trip, no system-message attention
+   competition.
+
+4. **`suggest_pairings` capability → DEFER.** Net-new AI capability
+   (no equivalent prompt template or capability today). Adds 1-2
+   days of work. Chat works without it — users asking "what goes
+   with this?" get a reasonable LLM-text response. Add as its own
+   dedicated phase post-D.9 with prompt-eval coverage.
+
+5. **Chat photo attachments → REUSE `item-photos` bucket + the
+   wardrobe upload pipeline.** Originally proposed a new
+   `chat-attachments` bucket + `chat.requestAttachmentUpload`
+   capability. Verified `wardrobe.requestPhotoUpload` already mints
+   user-scoped signed upload URLs to `item-photos`
+   (`${userId}/${uuid}.${ext}`, 2-hour TTL), and `wardrobe.addItem`
+   requires a `photoId` referencing an `item_photos` row.
+
+   New flow:
+   - Composer: `wardrobe.requestPhotoUpload({ filename, mimeType })`
+     → `{ uploadUrl, storagePath, token }`
+   - Composer: PUTs file to `uploadUrl`
+   - Composer: `wardrobe.confirmPhotoUpload({ ... })` → returns
+     `photoId`
+   - Composer: sends chat message with attachment
+     `{ type: 'image', photoId }` (NO url — server signs at use)
+   - `streamChatTurn`: persists attachment, server-mints a signed
+     download URL for the photoId, builds multipart vision message
+   - LLM (if user wants to add): calls `item.analyze({ photoId })`
+     → calls `wardrobe.addItem({ photoId, metadata })`
+
+   Wins:
+   - No new bucket → no creation script, no RLS policy work
+   - No new capability → smaller D.9a surface
+   - User-scoping enforced by existing pattern
+   - Photo not added to wardrobe = orphan in `item_photos` (same
+     as today's "uploaded but never confirmed" path; defer GC)
+
+### Schema migration 0012 (D.9a)
+
+```sql
+ALTER TABLE chat_messages ADD COLUMN attachments JSONB;
+```
+
+`attachments` is a nullable array of:
+
+```typescript
+{ type: 'image'; photoId: string }                         // wardrobe item-photos row reference
+| { type: 'wardrobe_item'; itemId: string }                // closet_items row reference
+```
+
+Server-side, the rendering pass mints signed URLs from `photoId` /
+looks up `imageUrl` from `itemId` (no client-supplied URLs persisted
+— eliminates trust issues).
+
+For tool result payloads — extend the EXISTING `tool_calls` JSONB
+type (no new column) in `packages/db/src/schema/stubs.ts`:
+
+```typescript
+export interface ChatToolCall {
+  name: string;
+  args: unknown;
+  ok: boolean;
+  error: string | null;
+  result?: unknown;   // NEW — frontend renders rich cards from this
+}
+```
+
+JSONB-stored, no migration needed for the type extension. Existing
+rows have `result: undefined` — backward-compatible.
+
+### SSE protocol change — minimal
+
+NO new event type. Just extend the existing `done` event payload to
+include `result` per `toolInvocation`. The streaming UI doesn't
+render rich cards inline anyway (legacy explicitly forbids it —
+causes layout shifts as text streams above them). Rich cards render
+only AFTER `done` lands, so we only need result data at `done` time.
+`tool-end` event stays as `{ name, ok, error }`.
+
+### D.9a — full change list (backend, no UI)
+
+Schema:
+- migration 0012: `chat_messages.attachments JSONB`
+- extend `ChatToolCall.result?: unknown` in `stubs.ts` (no migration)
+
+`@tela/ai` (multipart vision via parallel field):
+- add `contentParts?: Array<TextPart | ImageUrlPart>` to
+  `ChatMessage` in `packages/ai/src/types.ts`
+- update `providers/openai.ts:chatMulti` + `chatMultiStream` to
+  emit either `content` OR `contentParts` to OpenAI based on which
+  field is set on user-role messages
+- update `providers/mock.ts` to accept new shape
+
+`@tela/capabilities/chat`:
+- `streamChatTurn`: accept `attachments?: ChatAttachment[]` in
+  input; verify ownership of `itemId` (wardrobe item) and `photoId`
+  (item photo) BEFORE persisting; persist to
+  `chat_messages.attachments`; if any image attachment, mint a
+  signed download URL (1-hour TTL — long enough for OpenAI's
+  server-side fetch latency) and build multipart user message via
+  `contentParts`; if any wardrobe_item attachment, resolve
+  descriptions server-side and APPEND to user text per (D3); extend
+  `done` event payload to include `result` per `toolInvocation`;
+  for each tool call, write the result to `toolInvocations` array
+  AND persist to `tool_calls` JSONB.
+- `chat.getConversation`: add `limit?: number` (default 50, max
+  200) + `offset?: number` (default 0) inputs; return
+  `hasMore: boolean`. Also: SELECT the new `attachments` column.
+  Simple offset, NOT cursor — fine for chat sizes, upgradeable later.
+- Authorization: server uses `itemId` / `photoId` only; ignores any
+  client-sent URLs (client doesn't send any in v4).
+
+Capability flag flips (`chatTool: true` on FOUR more capabilities):
+- `wardrobe.addItem`
+- `item.analyze`     (so LLM can extract metadata before addItem)
+- `tryon.generate`
+- `tryon.getStatus`
+
+apps/api:
+- `chatStream.ts`: pass `attachments` through to `streamChatTurn`;
+  extend the input zod schema.
+
+apps/web:
+- `lib/chat.ts:getLatestConversation`:
+  - SELECT new `attachments` column
+  - Apply default `LIMIT 50` to the message query (was unbounded)
+  - Return `hasMore: boolean` to the caller
+  - Update return type accordingly
+
+NO bucket creation. NO new capability. NO RLS work. NO bootstrap
+script. (All the operational gaps from v3 are gone.)
+
+### D.9b — full change list (frontend)
+
+DELETE:
+- `apps/web/src/app/(main)/[lang]/chat/page.tsx` (current MVP RSC)
+- `apps/web/src/components/chat/ChatComposer.tsx` (current MVP, 427
+  lines)
+
+CREATE (in `apps/web/src/components/`, NOT under a `chat/`
+subfolder — match the rest of D.4–D.8):
+- `ChatComposer.tsx` (port from legacy 244 lines)
+- `ChatMessage.tsx` (port from legacy 132 lines)
+- `ChatItemGrid.tsx` (port from legacy 81 lines)
+- `ChatOutfitGrid.tsx` (port from legacy 113 lines)
+- `ChatWardrobePicker.tsx` (port from legacy 109 lines)
+
+CREATE:
+- `apps/web/src/hooks/useChat.ts` (~250 lines — smaller than
+  legacy's 335 because Firestore subscription + Firebase upload
+  paths are gone)
+
+REPLACE:
+- `apps/web/src/app/(main)/[lang]/chat/page.tsx` — port the
+  legacy 868-line page MINUS the ~200-line onboarding flow
+  (decision 1). Net ~660 lines. Client component.
+
+### useChat hook public API
+
+```typescript
+interface UseChatReturn {
+  messages: ChatMessage[];
+  loading: boolean;
+  sending: boolean;
+  streaming: {
+    isStreaming: boolean;
+    streamedText: string;
+    activeToolName: string | null;
+  };
+  hasMore: boolean;
+  error: string | null;
+  sendMessage: (text: string, attachments?: ComposerAttachment[]) => Promise<void>;
+  loadMore: () => Promise<void>;
+  cancelStream: () => void;
+  clearError: () => void;
+}
+```
+
+Implementation notes:
+
+- Pitfall #11: stash `useMutation().execute` in `useRef`, never put
+  in dep arrays.
+- Pitfall #13: don't put opts objects in dep arrays.
+- Photo upload (per decision 5 — reuse wardrobe pipeline):
+  - composer calls `wardrobe.requestPhotoUpload({ filename, mimeType })`
+  - composer PUTs file to the returned `uploadUrl`
+  - composer calls `wardrobe.confirmPhotoUpload({ ... })` →
+    returns `photoId`
+  - composer passes `{ type: 'image', photoId }` to `sendMessage`
+    — NO url field, server resolves at use time
+- SSE consumption: reuse the `readSseStream` pattern from the
+  current MVP `ChatComposer` — the only thing worth keeping.
+- Cancel: `AbortController` on the fetch. Wire `abortRef.current?.abort()`
+  to `cancelStream`. Legacy has this; current MVP doesn't.
+- 429 daily-limit handling: when SSE response status is 429 with
+  body `{ error: 'daily_limit', message }`, surface
+  `errorData.message` directly. Other failures: generic copy.
+- After-stream state: construct the persisted assistant message
+  from the `done` event payload directly. DON'T refetch the
+  conversation — in-page state is authoritative for the active turn.
+- Pagination: `loadMore` appends older messages to the FRONT of
+  `messages[]` (chronological order maintained).
+
+### Tool-name labels (mixed strategy: existing dict keys + English fallbacks)
+
+A small mapping table at the top of the new chat page covers ALL
+chatTool capabilities. The 4 with existing dict.chat keys use them;
+the rest fall back to English labels lifted from the current MVP
+ChatComposer's `describeToolCall`. Mixed but pragmatic — zero new
+dict keys, full coverage.
+
+| Our capability | Source | Loading label / completed label |
+|---|---|---|
+| `outfit.generate` | `dict.chat.stylingOutfits` | "Styling your outfits..." |
+| `wardrobe.addItem` | `dict.chat.analyzingItem` | "Analyzing your item..." |
+| `tryon.generate` | `dict.chat.generatingTryOn` | "Generating try-on..." |
+| `outfit.save` | `dict.chat.savingToLookbook` | "Saving to lookbook..." |
+| `wardrobe.listItems` | English | "Looking through your wardrobe..." / "Looked through your wardrobe" |
+| `wardrobe.getItem` | English | "Looking at a specific piece..." / "Looked at a specific piece" |
+| `wardrobe.removeItem` | English | "Removing an item..." / "Removed an item from your closet" |
+| `outfit.list` | English | "Looking at your outfit history..." / "Looked at your outfit history" |
+| `outfit.get` | English | "Looking at an outfit..." / "Looked at an outfit in detail" |
+| `outfit.delete` | English | "Deleting an outfit..." / "Deleted an outfit" |
+| `outfit.setFeedback` | English | "Recording your feedback..." / "Recorded your feedback" |
+| `profile.get` | English | "Reviewing your style profile..." / "Reviewed your style profile" |
+| `profile.closetRead` | English | "Refreshing your style profile..." / "Refreshed your style profile" |
+| `context.assemble` | English | "Checking the time / season / occasion..." / "Checked the time / season / occasion" |
+| `item.analyze` | English | "Analyzing the photo..." / "Analyzed the photo" |
+| `tryon.getStatus` | English | "Checking try-on status..." / "Checked try-on status" |
+| (anything else) | English | "Working on it..." / "Did something" |
+
+Zero new dict keys. The legacy `dict.chat.findingPairings` (for
+suggest_pairings) stays unused — harmless extra (dictionaries
+shared with the legacy app; we don't curate orphans).
+
+### Rich card heuristic (which tool result becomes which card)
+
+The new chat page renders cards BELOW each message based on
+`msg.toolInvocations.filter(t => t.ok).map(t => t.result)`:
+
+| Result shape | Card type |
+|---|---|
+| `result.outfits` (array) | ChatOutfitGrid |
+| Single outfit object | ChatOutfitGrid (1 cell) |
+| `result.items` (array) | ChatItemGrid |
+| Single item object | ChatItemGrid (1 cell) |
+| Other shapes (counts, status, booleans) | No card — the LLM text reply covers it |
+
+**DROP confirmation cards entirely** — legacy emitted them from
+`chat-tools.ts` because each tool was hand-coded. Our model: the
+LLM writes the natural-language confirmation as its text reply.
+
+### What the legacy page does (must port)
+
+- `SuggestedPrompts`: 4 hardcoded prompts via `dict.chat.{suggestWear,
+  suggestPlan, suggestEvent, suggestMissing}`. Dismissible via
+  `sessionStorage["chat-prompts-dismissed"]`.
+- `ThinkingIndicator`: cycles 15 hardcoded English words ("Styling",
+  "Curating", "Draping", etc.) every 2s while waiting for first text.
+  **KEEP HARDCODED ENGLISH.** Add code comment marking as intentional.
+- `ToolLoadingIndicator`: per-tool labels via the mapping table above.
+- `StreamingMessage`: live-rendered while streaming. Shows ONLY
+  streamed text + active tool indicator. NO rich cards (legacy
+  comment: "they cause layout shifts as text appears above them").
+- `ChatMessage`: lightweight inline `renderMarkdown` (`**bold**`,
+  `*italic*`, `\\n`). Attachment thumbnails ABOVE bubble (`h-16
+  w-16 rounded-xl`). Timestamp shown on hover/tap.
+- Rich cards rendered by the PARENT page (not in `ChatMessage`),
+  BELOW each message. Collect ALL outfit cards across the message's
+  `toolInvocations` into ONE `ChatOutfitGrid`; same for items.
+- `ChatItemGrid`: 2-col grid + shimmer animation when
+  `enhancementStatus === 'enhancing'`. Map from `RichItem` (D.6) at
+  the call site.
+- `ChatOutfitGrid`: 2-col grid, 4-slot collage, "Add Outfit"/"View"
+  CTA based on `saved` state. Map from `RichOutfit` (D.7a) at the
+  call site.
+- `ChatWardrobePicker`: BottomSheet 3-col multi-select. Header:
+  "Wardrobe" / "X selected". Confirm icon top-right when selected.
+- Pagination: "Load older messages" button at top of scroll area.
+  Simple offset.
+- Auto-scroll to bottom on new messages or streaming text update.
+- Optimistic save state: track locally-saved outfit IDs in a Set so
+  "Add Outfit" → "View" transitions instantly.
+
+### Empty state
+
+When user has 0 wardrobe items and asks for outfits, the LLM gets a
+tool failure (`outfit.generate` requires ≥3 items) and explains via
+text reply. Verify the error envelope is structured enough for the
+LLM to recover gracefully. No special UI handling needed.
+
+### What to skip (with code comments)
+
+```tsx
+// (Legacy chat page also has an in-chat onboarding flow triggered
+// when !profile.styleDna. Skipped in D.9: D.5 onboarding quiz
+// handles language + body info + lifestyle. Style DNA replaced by
+// closet read (profile.closetRead). No equivalent UI needed here.
+// Re-evaluate post-launch if user data shows users want a soft
+// re-onboarding path.)
+```
+
+### Known limitations to call out in commit message
+
+1. **Cross-tab consistency** (no Realtime — defer).
+2. **Photo lifecycle**: when a user attaches a chat photo but
+   never asks the LLM to add it to wardrobe, the `item_photos`
+   row stays orphaned (no `closet_items` row references it).
+   Same as today's "uploaded via wardrobe but never confirmed"
+   path. Defer cleanup to a periodic GC job that scans
+   `item_photos` rows older than N days with no `closet_items`
+   reference. Already a pre-existing concern, not a D.9 regression.
+3. **`suggest_pairings` deferred** (decision 4) — chat works
+   without it.
+4. **Multi-conversation UI deferred** — `getLatestConversation`
+   means only the most-recent conversation is interactive.
+5. **Chat-specific cost rate limit not added** — uses global $2/day.
+
+### Smoke test script (after each push)
+
+After D.9a:
+- Existing chat still works (text-only, no attachments).
+- Migration applied. `\d chat_messages` shows new `attachments`
+  column.
+
+After D.9b:
+- Open `/en/chat`, send "What should I wear today?" — verify
+  `ChatOutfitGrid` renders with the generated outfit.
+- Tap an outfit card — `OutfitPiecesSheet` opens.
+- Use `+` menu → "From wardrobe" → select 2 items → close → send
+  "what goes with these?" — verify the LLM mentions the items by
+  description (proves wardrobe-context append worked).
+- Use `+` menu → "Take photo" → select image → send "add this to
+  my wardrobe" — verify the LLM calls `wardrobe.addItem` and the
+  new item appears in `/en/wardrobe`.
+- Cancel button: send a long question, hit cancel mid-stream —
+  verify the in-flight assistant bubble cleanly stops.
+- Pagination: scroll to top of messages, click "Load older
+  messages" — verify older messages prepend.
 
 ### Files to delete after port
 
-- `apps/web/src/components/chat/*` (my MVP ChatComposer)
-- `apps/web/src/lib/chat.ts` (server helper for latest conversation)
+- `apps/web/src/app/(main)/[lang]/chat/page.tsx` (current MVP RSC)
+- `apps/web/src/components/chat/ChatComposer.tsx` (current MVP)
+- `apps/web/src/components/chat/` (the directory itself once empty)
+
+NOT deleted:
+- `apps/web/src/lib/chat.ts` — keep but extend its `getLatestConversation`
+  to SELECT the new `attachments` column.
+
+### Decisions all locked — no STEP 2 picks needed
+
+The 5 architectural decisions (D1-D5 above) are locked. The new
+session restates them in their own words but doesn't re-decide.
+
+### Scope estimate
+
+| Half | Added | Deleted | Notes |
+|---|---|---|---|
+| D.9a | ~250 | 0 | Schema migration + ChatToolCall type + parallel `contentParts` field on ChatMessage + provider mapping + streamChatTurn extension + 4 chatTool flips + lib/chat.ts pagination. NO bucket creation, NO new capability (decision 5). |
+| D.9b | ~1650 | ~430 | Page + 5 components + hook + delete MVP |
+| **Total** | **~1900** | **~430** | Bigger than D.7. ~150 lines smaller than v3 thanks to decision 5. |
 
 ---
 

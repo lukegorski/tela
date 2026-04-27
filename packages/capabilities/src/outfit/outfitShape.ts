@@ -136,6 +136,7 @@ export async function fetchRichOutfits(opts: {
   userId: string;
   outfitId?: string;
   savedOnly?: boolean;
+  orderBy?: 'createdAt' | 'savedAt' | 'wornAt';
   limit?: number;
   offset?: number;
 }): Promise<RichOutfit[]> {
@@ -166,7 +167,7 @@ export async function fetchRichOutfits(opts: {
     .from(outfits)
     .innerJoin(contexts, eq(contexts.id, outfits.contextId))
     .where(and(...conditions))
-    .orderBy(desc(outfits.createdAt));
+    .orderBy(desc(outfits[opts.orderBy ?? 'createdAt']));
 
   const outfitRows = (
     opts.limit !== undefined

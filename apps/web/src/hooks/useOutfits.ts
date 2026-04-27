@@ -18,6 +18,10 @@ const ACTIVE_TRY_ON_STATUSES = new Set<TryOnStatus>(["pending", "running"]);
  *
  *  - Reads via `outfit.list` (rich shape — items + signed URLs + latest
  *    try-on) on mount and after every mutation.
+ *  - `savedOnly` mode (lookbook): pulls only saved outfits sorted by
+ *    `savedAt` desc, and `toggleSave(unsave)` filters the row out of
+ *    local state so the cell disappears immediately rather than after
+ *    refetch (mirrors legacy lookbook handleOutfitUpdate L168–179).
  *  - Try-on polling: scans the current outfits for any whose latest
  *    `tryOn.status` is `pending` | `running` and polls `tryon.getStatus`
  *    every TRY_ON_POLL_MS until they settle. This subsumes the legacy
@@ -33,9 +37,13 @@ const ACTIVE_TRY_ON_STATUSES = new Set<TryOnStatus>(["pending", "running"]);
  *
  * Pitfall #11 mitigation: tRPC's `useMutation().execute` is unstable
  * across renders. We stash it in a ref and reference `.current` from
- * effects — only `userId` needs to be in dep arrays.
+ * effects — only `userId` (and `savedOnly`) need to be in dep arrays.
+ * `savedOnly` is destructured into a primitive at the top of the hook
+ * before any dep array touches it; if the caller passes a fresh `opts`
+ * object every render, only the primitive value changes drive re-runs.
  */
-export function useOutfits() {
+export function useOutfits(opts?: { savedOnly?: boolean }) {
+  const { savedOnly = false } = opts ?? {};
   const { user } = useAuthContext();
   const [outfits, setOutfits] = useState<Outfit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +68,12 @@ export function useOutfits() {
     try {
       const result = (await executeRef.current.mutateAsync({
         name: "outfit.list",
-        input: { savedOnly: false, limit: 50, offset: 0 },
+        input: {
+          savedOnly,
+          orderBy: savedOnly ? "savedAt" : "createdAt",
+          limit: 100,
+          offset: 0,
+        },
       })) as { outfits: Outfit[]; total: number };
       setOutfits(result.outfits);
     } catch (err) {
@@ -69,7 +82,7 @@ export function useOutfits() {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, savedOnly]);
 
   // Initial load.
   useEffect(() => {
@@ -102,7 +115,12 @@ export function useOutfits() {
       try {
         const result = (await executeRef.current.mutateAsync({
           name: "outfit.list",
-          input: { savedOnly: false, limit: 50, offset: 0 },
+          input: {
+            savedOnly,
+            orderBy: savedOnly ? "savedAt" : "createdAt",
+            limit: 100,
+            offset: 0,
+          },
         })) as { outfits: Outfit[]; total: number };
         if (cancelled) return;
         setOutfits(result.outfits);
@@ -134,7 +152,7 @@ export function useOutfits() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [outfits]);
+  }, [outfits, savedOnly]);
 
   /**
    * Generate a single outfit for the given occasion. Mirrors legacy:
@@ -184,13 +202,19 @@ export function useOutfits() {
     async (outfitId: string, saved: boolean) => {
       if (!userId) return;
       // Optimistic flip — UI animates immediately; rollback on error.
-      setOutfits((prev) =>
-        prev.map((o) =>
+      // In savedOnly mode (lookbook), an unsave should also remove the row
+      // from local state so the cell disappears from the grid immediately,
+      // mirroring the legacy lookbook handleOutfitUpdate behavior.
+      setOutfits((prev) => {
+        if (savedOnly && !saved) {
+          return prev.filter((o) => o.id !== outfitId);
+        }
+        return prev.map((o) =>
           o.id === outfitId
             ? { ...o, saved, savedAt: saved ? new Date().toISOString() : null }
             : o,
-        ),
-      );
+        );
+      });
       try {
         await executeRef.current.mutateAsync({
           name: "outfit.save",
@@ -202,7 +226,7 @@ export function useOutfits() {
         throw err;
       }
     },
-    [userId, refetch],
+    [userId, refetch, savedOnly],
   );
 
   const setFeedback = useCallback(

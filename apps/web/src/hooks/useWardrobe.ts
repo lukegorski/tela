@@ -115,7 +115,13 @@ export function useWardrobe() {
 
     if (userId) {
       setLoading(true);
-      void tick();
+      // Catch errors locally so a transient 401 (e.g. while the auth token
+      // is mid-refresh) doesn't bubble up as an unhandled promise rejection,
+      // which would trip Next.js's dev error overlay. The error is already
+      // captured into refetch's `setError` for the UI to surface.
+      tick().catch(() => {
+        if (!cancelled) setLoading(false);
+      });
     } else {
       setItems([]);
       setLoading(false);

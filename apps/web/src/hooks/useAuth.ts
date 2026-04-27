@@ -172,8 +172,24 @@ export function useAuth(): UseAuthReturn {
   useEffect(() => {
     let mounted = true;
 
+    // Defensive timeout: if getSession() never resolves (e.g., a hung
+    // Supabase initialisation, a network stall on the storage layer),
+    // we still want loading to flip false within a bounded window so
+    // ProtectedRoute can route the user to the landing page rather than
+    // sit on a loading spinner forever. Cleared on the happy path.
+    const fallbackTimer = setTimeout(() => {
+      if (mounted) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[useAuth] supabase.auth.getSession() did not resolve within 5s — proceeding as anonymous',
+        );
+        setLoading(false);
+      }
+    }, 5000);
+
     // Initial state
     void supabase.auth.getSession().then(async ({ data }) => {
+      clearTimeout(fallbackTimer);
       if (!mounted) return;
       const sessionUser = data.session?.user;
       if (sessionUser) {
@@ -200,6 +216,7 @@ export function useAuth(): UseAuthReturn {
 
     return () => {
       mounted = false;
+      clearTimeout(fallbackTimer);
       sub.subscription.unsubscribe();
     };
   }, [supabase, fetchProfile]);

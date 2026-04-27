@@ -14,7 +14,9 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push(localePath(lang, "/"));
+      // replace, not push: the protected URL shouldn't pollute history
+      // when redirecting an unauthed user away.
+      router.replace(localePath(lang, "/"));
     }
   }, [user, loading, router, lang]);
 

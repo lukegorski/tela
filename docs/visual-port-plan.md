@@ -400,12 +400,201 @@ ship.
 
 ## Phase D.8 — Lookbook
 
-**Legacy file:** `src/app/(main)/[lang]/lookbook/page.tsx`
+**Small surface, real plumbing.** Legacy lookbook is 370 lines (less
+than half of outfits' 877). All UI components reused unmodified from
+D.7b — the work is one new page file + extending `useOutfits` with a
+`savedOnly` mode + extending `outfit.list` with an `orderBy` arg.
+Single commit, no a/b split needed.
 
-Smaller — likely reuses `OutfitCard` from outfits port. Filtered to
-`saved=true` only. Uses our existing `outfit.list({ savedOnly: true })`.
+### Legacy file (READ-ONLY visual + behavior spec)
 
-Port after D.7 since it shares components.
+- `src/app/(main)/[lang]/lookbook/page.tsx` (370 lines)
+
+There is **no `useLookbook` hook in legacy** — queries are inline via
+Firestore `onSnapshot` on `users/{uid}/outfits where saved == true
+orderBy savedAt desc`.
+
+### Reused from earlier ports — DO NOT MODIFY
+
+| Surface | Source |
+|---|---|
+| `OutfitHero`, `OutfitGridCell`, `OutfitPiecesSheet` | D.7b |
+| `BottomSheet`, `LoadingSpinner`, `ProtectedRoute`, `ColorFilterChips` | D.4 / D.6 |
+| `useScrollPersistence`, `useWardrobe` | D.6 |
+| `useAuthContext`, `useDictionary` | D.4 chrome |
+
+If D.8 needs to edit any D.7b component to make it work in lookbook,
+that's a design issue — STOP and surface to Luke. The components
+were built reusable.
+
+### New app MVP to delete
+
+**None.** The lookbook route doesn't exist in tela yet — straight
+greenfield. Just create `apps/web/src/app/(main)/[lang]/lookbook/page.tsx`.
+
+### Capability extension — `outfit.list` gains `orderBy`
+
+`packages/capabilities/src/outfit/listOutfits.ts` — add to the input
+zod object:
+
+```typescript
+orderBy: z.enum(['createdAt', 'savedAt', 'wornAt']).default('createdAt'),
+```
+
+Pass through to `fetchRichOutfits`.
+
+`packages/capabilities/src/outfit/outfitShape.ts:169` — current:
+
+```typescript
+.orderBy(desc(outfits.createdAt))
+```
+
+Replace with:
+
+```typescript
+.orderBy(desc(outfits[opts.orderBy ?? 'createdAt']))
+```
+
+`outfit.list` has `chatTool: true`, so the chat tool catalog will see
+the new arg. Document in the capability's `description` string that
+`'savedAt'` is most useful when paired with `savedOnly: true`. **No
+auto-switching** — explicit `orderBy` arg, default `'createdAt'`. The
+chat-tool surface stays clean; magic auto-coupling between input
+fields would be confusing for an LLM consumer.
+
+### Hook extension — `useOutfits` gains `savedOnly`
+
+`apps/web/src/hooks/useOutfits.ts` is currently hardcoded to
+`savedOnly: false` in two places (refetch ~line 63, polling tick
+~line 105). Both must accept the new opt.
+
+New signature:
+
+```typescript
+useOutfits(opts?: { savedOnly?: boolean })
+```
+
+Implementation:
+
+```typescript
+const { savedOnly = false } = opts ?? {};
+// In every outfit.list call inside the hook:
+input: {
+  savedOnly,
+  orderBy: savedOnly ? 'savedAt' : 'createdAt',
+  limit: 100,        // bumped from 50; capability max
+  offset: 0,
+}
+```
+
+Lookbook calls `useOutfits({ savedOnly: true })`. Outfits page keeps
+its current `useOutfits()` (no args; defaults to `savedOnly: false`,
+`orderBy: 'createdAt'`).
+
+**Pitfall #11 watch (subtle re-render variant):** `opts` is a fresh
+object every render. Destructure `savedOnly` into a primitive at the
+top of the hook BEFORE any `useEffect` / `useCallback` dep array
+references it — otherwise the destructured object identity changes
+every render and effects re-fire forever (same shape as the D.6
+auth-loop bug). Pin it to a primitive first.
+
+**`toggleSave` optimistic-removal in savedOnly mode:** when an outfit
+is unsaved from inside the lookbook pieces sheet, it must DISAPPEAR
+from the grid immediately, not after the next refetch. The hook's
+existing optimistic `toggleSave` flips `saved` in local state. In
+savedOnly mode, additionally filter the outfit out of the local list
+when `saved` becomes `false`. Mirror the legacy lookbook line 168–179
+behavior. Same pattern for `setFeedback` if cleared feedback ever
+removes from the view (it doesn't currently — feedback is independent
+of saved).
+
+### What the legacy page does (don't drop any)
+
+- 3 grid modes (1 = hero snap-y, 2-col DEFAULT, 3-col).
+  `localStorage["lookbook-grid-mode"]` (NOT `outfits-grid-mode`).
+- `useScrollPersistence("lookbook-scroll", ...)` (NOT
+  `outfits-scroll`).
+- Touch swipe-back-to-grid gesture (right-edge swipe).
+- Color filter ONLY (no occasion filter — that's outfits-only).
+- Pieces sheet on tap (uses `OutfitPiecesSheet` from D.7b).
+- Desktop: 5-column grid, `h-[calc(100vh-10rem)]` cells.
+- Mobile: snap-y feed in mode 1, 2/3-col grid in modes 2/3.
+- Header: title + grid-toggle (mobile only) + filter buttons. **No
+  plus / generate button** — lookbook doesn't generate.
+- Sort: `savedAt DESC` (legacy uses Firestore `orderBy("savedAt",
+  "desc")`).
+
+### Empty state — TWO branches
+
+Legacy line 330:
+
+```jsx
+{outfits.length > 0 ? dict.outfits.noMatchFilters
+                    : dict.lookbook.noSavedOutfits}
+```
+
+- 0 saved + 0 filters → "no saved outfits"
+- N saved + color filter applied + 0 matches → "no match filters"
+- N saved + 0 filters → grid renders
+
+Preserve both branches.
+
+### i18n — ALREADY DONE, no work needed
+
+`dict.lookbook` namespace already exists in all 14 dictionaries
+(`apps/web/src/dictionaries/*.json`):
+
+- `dict.lookbook.title` ("Lookbook")
+- `dict.lookbook.noSavedOutfits` ("No saved outfits yet")
+- `dict.lookbook.filterLookbook` ("Filter lookbook")
+
+Plus `dict.outfits.noMatchFilters` is already there. **D.8 adds zero
+dict keys.** The legacy app's dicts at
+`/Users/lukegorski/ale/src/app/(main)/[lang]/dictionaries/` were
+mirrored when the new app's dicts were ported — confirmed by reading
+`apps/web/src/dictionaries/en.json` line 114.
+
+### Nav — ALREADY WIRED, no work needed
+
+- `MobileNav.tsx` line 71: `localePath(lang, "/lookbook")`
+- `Navbar.tsx` line 61: same
+
+Active-tab highlighting works via `pathname.startsWith`. Just
+creating the page is enough — clicking the lookbook tab will route
+there with the correct active state.
+
+### Known limitations — call out in commit message, don't try to solve
+
+1. **Cross-tab consistency.** Legacy used Firestore `onSnapshot`, so
+   a save on /outfits in tab A appeared in /lookbook in tab B
+   instantly. We don't have that. Without Realtime / cross-tab
+   broadcast, tab B is stale until refetch. Defer to a Realtime
+   phase that addresses this app-wide.
+2. **`limit: 100` cap.** A user with >100 saved outfits sees only the
+   100 most-recently-saved. The capability max is 100. Add infinite
+   scroll later if user data shows lookbooks routinely exceed 100.
+
+### Smoke-test data requirement
+
+Lookbook needs at least one saved outfit to render meaningfully.
+Before Luke smoke-tests on Railway, generate + save 1-2 outfits via
+`/outfits`. Flag this in the "Push?" message so test data exists
+before testing.
+
+### Files to delete
+
+**None.** No MVP lookbook in tela.
+
+### Decisions to surface to Luke before coding
+
+1. Confirm the `useOutfits` API change: `useOutfits(opts?: {
+   savedOnly?: boolean })`, default `limit` bumped 50 → 100, internal
+   `orderBy` derived from `savedOnly`.
+2. Confirm the `outfit.list` capability change: add `orderBy` enum
+   arg, default `'createdAt'`, document `savedAt`-with-`savedOnly`
+   idiom in the description.
+3. Confirm savedOnly-mode optimistic-removal in `toggleSave` (filter
+   out of local list when `saved` becomes `false`).
 
 ---
 

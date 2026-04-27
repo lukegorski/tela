@@ -33,9 +33,7 @@ export const chatConversations = pgTable(
  *
  * Stored as jsonb on chat_messages.tool_calls when role='assistant'. Captures
  * enough to render the activity in the UI ("generated 3 outfits", "looked
- * up the floral capris") and to debug failed turns. The full tool result
- * payload is NOT stored here — it lives in the generations row referenced
- * by the message's generationId, which keeps chat_messages light.
+ * up the floral capris") and to debug failed turns.
  */
 export interface ChatToolCall {
   /** Capability name, e.g. 'outfit.generate' */
@@ -46,7 +44,22 @@ export interface ChatToolCall {
   ok: boolean;
   /** Error message when ok=false; null otherwise */
   error: string | null;
+  /**
+   * Capability return value (when ok=true), used by the chat UI to render
+   * rich cards (outfit grids, item grids) below the assistant message.
+   * Optional + JSONB-stored so existing rows stay valid without migration.
+   */
+  result?: unknown;
 }
+
+/**
+ * One attachment on a user-role chat message. The client passes only the
+ * row id (photoId / itemId); the server resolves to actual URLs at use
+ * time, so URLs aren't persisted and can't be forged.
+ */
+export type ChatAttachment =
+  | { type: 'image'; photoId: string }
+  | { type: 'wardrobe_item'; itemId: string };
 
 export const chatMessages = pgTable(
   'chat_messages',
@@ -59,6 +72,12 @@ export const chatMessages = pgTable(
     content: text('content').notNull(),
     /** Tool calls the assistant invoked, if any */
     toolCalls: jsonb('tool_calls').$type<ChatToolCall[]>(),
+    /**
+     * Attachments on user messages: photo references (photoId) or wardrobe
+     * item references (itemId). Server resolves to URLs / descriptions at
+     * use; never client-supplied URLs.
+     */
+    attachments: jsonb('attachments').$type<ChatAttachment[]>(),
     /** Optional generation reference for assistant messages */
     generationId: uuid('generation_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

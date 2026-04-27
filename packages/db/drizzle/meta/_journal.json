@@ -85,6 +85,13 @@
       "when": 1777158255190,
       "tag": "0011_closed_loa",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1777271088564,
+      "tag": "0012_purple_la_nuit",
+      "breakpoints": true
     }
   ]
 }

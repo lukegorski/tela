@@ -37,6 +37,7 @@ export const addItem = registerCapability({
     "Add a clothing item to a user's closet with AI-extracted metadata. Requires a photo reference and classification metadata.",
   input,
   output,
+  chatTool: true,
 
   async execute({ photoId, metadata }) {
     const { userId, source } = getRequestContext();

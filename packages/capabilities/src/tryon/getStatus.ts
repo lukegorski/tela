@@ -38,6 +38,7 @@ export const getTryOnStatus = registerCapability({
     "Fetch the status of a try-on job — by jobId, or the latest for an outfitId. Returns a result URL when status is 'complete'. Use this to drive the outfit detail page's try-on UI.",
   input,
   output,
+  chatTool: true,
 
   async execute({ jobId, outfitId }) {
     if (!jobId && !outfitId) {

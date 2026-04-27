@@ -29,10 +29,23 @@ import {
 import { contextFromAuthHeader, AuthError } from './auth.js';
 import { logger } from './logger.js';
 
+/**
+ * Attachment payload from the client. Only the row id (photoId / itemId)
+ * crosses the wire — the server resolves URLs / descriptions at use time
+ * (signed download URL for photos; SELECT against closet_items for
+ * wardrobe items). Prevents URL forgery and keeps the schema light.
+ */
+const attachmentSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('image'), photoId: z.string().uuid() }),
+  z.object({ type: z.literal('wardrobe_item'), itemId: z.string().uuid() }),
+]);
+
 const inputSchema = z.object({
   conversationId: z.string().uuid().nullable().default(null),
   message: z.string().min(1).max(4000),
   locale: z.string().default('en'),
+  /** Up to 10 attachments per message. Undefined for the common text-only path. */
+  attachments: z.array(attachmentSchema).max(10).optional(),
 });
 
 export function mountChatStream(app: Hono): void {

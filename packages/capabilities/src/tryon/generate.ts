@@ -44,6 +44,7 @@ export const generateTryOn = registerCapability({
     'Enqueue a Fashn try-on for an outfit and return the jobId immediately. Pipeline runs in a background worker; poll tryon.getStatus to drive UI. Returns a cached complete job if one exists and force=false.',
   input,
   output,
+  chatTool: true,
 
   async execute({ outfitId, force }) {
     const { userId } = getRequestContext();

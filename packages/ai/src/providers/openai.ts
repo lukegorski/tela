@@ -83,6 +83,19 @@ export class OpenAIProvider implements AIProvider {
         case 'system':
           return { role: 'system', content: m.content ?? '' };
         case 'user':
+          // contentParts (multipart vision) takes precedence over content.
+          // Only user-role messages support contentParts; assistant / system
+          // / tool messages keep emitting plain text content.
+          if (m.contentParts) {
+            return {
+              role: 'user',
+              content: m.contentParts.map((p) =>
+                p.type === 'text'
+                  ? { type: 'text' as const, text: p.text }
+                  : { type: 'image_url' as const, image_url: p.image_url },
+              ),
+            };
+          }
           return { role: 'user', content: m.content ?? '' };
         case 'assistant': {
           const msg: OpenAI.ChatCompletionAssistantMessageParam = {
@@ -178,6 +191,19 @@ export class OpenAIProvider implements AIProvider {
         case 'system':
           return { role: 'system', content: m.content ?? '' };
         case 'user':
+          // contentParts (multipart vision) takes precedence over content.
+          // Only user-role messages support contentParts; assistant / system
+          // / tool messages keep emitting plain text content.
+          if (m.contentParts) {
+            return {
+              role: 'user',
+              content: m.contentParts.map((p) =>
+                p.type === 'text'
+                  ? { type: 'text' as const, text: p.text }
+                  : { type: 'image_url' as const, image_url: p.image_url },
+              ),
+            };
+          }
           return { role: 'user', content: m.content ?? '' };
         case 'assistant': {
           const msg: OpenAI.ChatCompletionAssistantMessageParam = {

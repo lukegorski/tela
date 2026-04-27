@@ -46,6 +46,7 @@ export const analyzeItem = registerCapability({
     "Analyze a clothing item photo using AI vision to extract structured metadata: category, color, pattern, style, fit, formality, season compatibility, and a brief description in the user's locale.",
   input,
   output,
+  chatTool: true,
 
   async execute({ photoId, locale }) {
     const { userId } = getRequestContext();

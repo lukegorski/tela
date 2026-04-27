@@ -18,6 +18,7 @@ export {
   tryOnJobs,
   translations,
   type ChatToolCall,
+  type ChatAttachment,
   type TryOnStatus,
   type TryOnStep,
 } from './stubs.js';

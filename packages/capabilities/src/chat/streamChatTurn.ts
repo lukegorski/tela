@@ -19,19 +19,27 @@
  * Some duplication with sendMessage is accepted for now — when streaming
  * stabilizes we can extract a shared helper (Phase 9 polish).
  */
-import { eq, desc, and, sql as drizzleSql } from 'drizzle-orm';
+import { eq, desc, and, inArray, sql as drizzleSql } from 'drizzle-orm';
 import {
   getDb,
   chatConversations,
   chatMessages,
   styleProfiles,
   closetItems,
+  itemPhotos,
+  type ChatAttachment,
 } from '@tela/db';
-import { callMulti, callMultiStream, type ChatMessage } from '@tela/ai';
+import {
+  callMulti,
+  callMultiStream,
+  type ChatMessage,
+  type ChatMessageContentPart,
+} from '@tela/ai';
 import { getPrompt } from '@tela/prompts';
 import { logEvent } from '@tela/events';
 import { getRequestContext } from '../context/requestContext.js';
 import { buildToolCatalog, dispatchTool } from './toolCatalog.js';
+import { getSupabaseAdmin, ITEM_PHOTOS_BUCKET } from '../storage/supabase.js';
 
 const MAX_HISTORY_MESSAGES = 20;
 const MAX_TOOL_DEPTH = 5;
@@ -40,6 +48,13 @@ export interface StreamChatInput {
   conversationId: string | null;
   message: string;
   locale: string;
+  /**
+   * User-message attachments. Server resolves photoIds to signed image URLs
+   * (multipart vision) and itemIds to descriptions appended to the user
+   * text. Client never supplies URLs — we read them out of our own tables
+   * to prevent forgery.
+   */
+  attachments?: ChatAttachment[];
 }
 
 /**
@@ -58,9 +73,93 @@ export type ChatStreamEvent =
       assistantMessageId: string;
       assistantContent: string;
       costCents: number;
-      toolInvocations: { name: string; args: unknown; ok: boolean; error: string | null }[];
+      /**
+       * Tool invocations made during this turn, including the result
+       * payload (when ok=true). The chat UI uses `result` to render rich
+       * cards (outfit grids, item grids) below the assistant message.
+       */
+      toolInvocations: {
+        name: string;
+        args: unknown;
+        ok: boolean;
+        error: string | null;
+        result?: unknown;
+      }[];
     }
   | { type: 'error'; message: string };
+
+/**
+ * Verify ownership of attachments and resolve to data the LLM can consume:
+ *   - image attachments → signed download URLs (TTL 3600s, long enough for
+ *     OpenAI's server-side fetch)
+ *   - wardrobe_item attachments → human-readable descriptions appended to
+ *     the user's text per locked decision (D3)
+ *
+ * Throws if any photoId / itemId doesn't belong to the requesting user —
+ * the caller forwards as an SSE 'error' event.
+ */
+async function resolveAttachmentsForChat(
+  attachments: ChatAttachment[],
+  userId: string,
+): Promise<{ imageUrls: string[]; wardrobeContextText: string | null }> {
+  if (attachments.length === 0) {
+    return { imageUrls: [], wardrobeContextText: null };
+  }
+
+  const db = getDb();
+  const photoIds = attachments.flatMap((a) => (a.type === 'image' ? [a.photoId] : []));
+  const itemIds = attachments.flatMap((a) => (a.type === 'wardrobe_item' ? [a.itemId] : []));
+
+  const imageUrls: string[] = [];
+  if (photoIds.length > 0) {
+    const photos = await db
+      .select({ id: itemPhotos.id, storagePath: itemPhotos.storagePath })
+      .from(itemPhotos)
+      .where(and(inArray(itemPhotos.id, photoIds), eq(itemPhotos.userId, userId)));
+    if (photos.length !== photoIds.length) {
+      throw new Error('One or more photo attachments not found or do not belong to user');
+    }
+    const supabase = getSupabaseAdmin();
+    for (const p of photos) {
+      const { data, error } = await supabase.storage
+        .from(ITEM_PHOTOS_BUCKET)
+        .createSignedUrl(p.storagePath, 3600);
+      if (error || !data) {
+        throw new Error(
+          `Failed to mint signed URL for photo ${p.id}: ${error?.message ?? 'unknown error'}`,
+        );
+      }
+      imageUrls.push(data.signedUrl);
+    }
+  }
+
+  let wardrobeContextText: string | null = null;
+  if (itemIds.length > 0) {
+    const items = await db
+      .select({
+        id: closetItems.id,
+        category: closetItems.category,
+        subcategory: closetItems.subcategory,
+        primaryColor: closetItems.primaryColor,
+        description: closetItems.description,
+      })
+      .from(closetItems)
+      .where(and(inArray(closetItems.id, itemIds), eq(closetItems.userId, userId)));
+    if (items.length !== itemIds.length) {
+      throw new Error(
+        'One or more wardrobe item attachments not found or do not belong to user',
+      );
+    }
+    const phrases = items.map((it) => {
+      const label = it.subcategory ?? it.category;
+      const desc = it.description ? ` — ${it.description}` : '';
+      return `${it.primaryColor} ${label}${desc} (id: ${it.id})`;
+    });
+    wardrobeContextText = `[Attached wardrobe items: ${phrases.join('; ')}]`;
+  }
+
+  return { imageUrls, wardrobeContextText };
+}
 
 /**
  * Run a single chat turn, yielding events as work progresses.
@@ -105,7 +204,17 @@ export async function* streamChatTurn(
     });
   }
 
-  // 2. Load history (chronological)
+  // 2. Resolve attachments BEFORE persisting anything — ownership check
+  // belongs at the boundary, and signed URLs / wardrobe descriptions are
+  // needed for both the persisted row's UI rendering and the LLM message.
+  const { imageUrls, wardrobeContextText } = await resolveAttachmentsForChat(
+    input.attachments ?? [],
+    userId,
+  );
+
+  // 3. Load history (chronological). History stays purely text — past
+  // attachments aren't re-resolved per turn (signed URLs would expire and
+  // the LLM's prior responses already carry the relevant context).
   const history = await db
     .select({ role: chatMessages.role, content: chatMessages.content })
     .from(chatMessages)
@@ -114,13 +223,17 @@ export async function* streamChatTurn(
     .limit(MAX_HISTORY_MESSAGES);
   history.reverse();
 
-  // 3. Persist the user message + emit user-saved
+  // 4. Persist the user message + emit user-saved. Persisted `content` is
+  // the user's actual text — wardrobe-context append is only sent to the
+  // LLM for the current turn (D3). Structured `attachments` go to a
+  // separate column so the UI can render thumbnails above the bubble.
   const [userMsg] = await db
     .insert(chatMessages)
     .values({
       conversationId: resolvedConvoId,
       role: 'user',
       content: input.message,
+      attachments: input.attachments && input.attachments.length > 0 ? input.attachments : null,
     })
     .returning({ id: chatMessages.id });
 
@@ -133,7 +246,7 @@ export async function* streamChatTurn(
 
   yield { type: 'user-saved', userMessageId: userMsg.id, conversationId: resolvedConvoId };
 
-  // 4. Build system context
+  // 5. Build system context
   const [profile, items] = await Promise.all([
     db.query.styleProfiles.findFirst({ where: eq(styleProfiles.userId, userId) }),
     db
@@ -173,18 +286,42 @@ export async function* streamChatTurn(
     .replaceAll('{{wardrobe_summary}}', wardrobeSummary)
     .replaceAll('{{locale}}', input.locale);
 
+  // Compose the current user message for the LLM:
+  //   - If wardrobe items are attached, append their descriptions per (D3).
+  //   - If image attachments exist, switch to multipart contentParts so the
+  //     model can actually see the image. (Text-only messages stay on
+  //     `content` to keep the wire payload simple.)
+  const userTextForLLM = wardrobeContextText
+    ? `${input.message}\n\n${wardrobeContextText}`
+    : input.message;
+
+  const currentUserMessage: ChatMessage =
+    imageUrls.length > 0
+      ? {
+          role: 'user',
+          content: null,
+          contentParts: [
+            { type: 'text', text: userTextForLLM },
+            ...imageUrls.map<ChatMessageContentPart>((url) => ({
+              type: 'image_url',
+              image_url: { url, detail: 'auto' },
+            })),
+          ],
+        }
+      : { role: 'user', content: userTextForLLM };
+
   const messages: ChatMessage[] = [
     { role: 'system', content: renderedSystem },
     ...history.map<ChatMessage>((m) => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
     })),
-    { role: 'user', content: input.message },
+    currentUserMessage,
   ];
 
   const tools = buildToolCatalog();
 
-  // 5. Tool-call loop. Final round streams; intermediate rounds don't.
+  // 6. Tool-call loop. Final round streams; intermediate rounds don't.
   yield { type: 'thinking' };
 
   const toolInvocations: {
@@ -192,6 +329,7 @@ export async function* streamChatTurn(
     args: unknown;
     ok: boolean;
     error: string | null;
+    result?: unknown;
   }[] = [];
   let totalCostCents = 0;
   let assistantContent: string | null = null;
@@ -256,6 +394,11 @@ export async function* streamChatTurn(
         args: tc.args,
         ok: dispatch.ok,
         error: errorString,
+        // result powers the rich-card heuristic (ChatOutfitGrid /
+        // ChatItemGrid). Captured only when the tool succeeded; persisted
+        // into chat_messages.tool_calls JSONB and surfaced via the `done`
+        // SSE event. Omitted on error so the column stays small.
+        result: dispatch.ok ? dispatch.result : undefined,
       });
       const payload = dispatch.ok ? { ok: true, result: dispatch.result } : { ok: false, error: dispatch.error };
       messages.push({
@@ -306,7 +449,7 @@ export async function* streamChatTurn(
     assistantContent = streamed || '(no reply)';
   }
 
-  // 6. Persist assistant message
+  // 7. Persist assistant message
   const [assistantRow] = await db
     .insert(chatMessages)
     .values({

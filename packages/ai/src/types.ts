@@ -119,9 +119,32 @@ export interface ChatResponse {
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | null;
+  /**
+   * User-only multipart content (text + image_url parts). When set on a
+   * 'user' message, providers emit this in place of `content` to enable
+   * vision input. Assistant / system / tool messages keep using `content`
+   * — they never need multipart in practice.
+   *
+   * Parallel field (rather than widening `content`) so existing string
+   * callers and the chat persistence layer (which writes `content` to a
+   * text column) stay valid.
+   */
+  contentParts?: ChatMessageContentPart[];
   toolCallId?: string;
   toolCalls?: ToolCall[];
 }
+
+/**
+ * One part of a multipart user message — text fragment or image URL.
+ * `image_url.url` is provider-fetchable (signed URLs work; OpenAI fetches
+ * server-side).
+ */
+export type ChatMessageContentPart =
+  | { type: 'text'; text: string }
+  | {
+      type: 'image_url';
+      image_url: { url: string; detail?: 'auto' | 'low' | 'high' };
+    };
 
 /**
  * A single tool invocation requested by the assistant. We normalize the

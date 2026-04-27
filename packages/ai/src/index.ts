@@ -24,6 +24,7 @@ export type {
   ImageResponse,
   ModelPricing,
   ChatMessage,
+  ChatMessageContentPart,
   ToolCall,
   ToolDef,
   MultiTurnParams,

@@ -346,12 +346,11 @@ See "Push approval pattern" above.
 | 4 settings sub-pages | ✅ Ported | `apps/web/src/app/(main)/[lang]/settings/{,location,language,try-on,theme}/page.tsx` |
 | Wardrobe page + `WardrobeItemCard` + `ItemDetailContent` + `ColorFilterChips` + `useWardrobe` hook | ✅ Ported (D.6) | `apps/web/src/app/(main)/[lang]/wardrobe/page.tsx`, `apps/web/src/components/{WardrobeItemCard,ItemDetailContent,ColorFilterChips}.tsx`, `apps/web/src/hooks/useWardrobe.ts` |
 | Wardrobe item detail (inline via `BottomSheet`, no separate route) | ✅ Done (D.6 deleted my MVP `[itemId]/page.tsx`) | — |
-| **Outfits page + `OutfitCard` + `OutfitHero` + `OutfitPiecesSheet` + `OutfitGridCell` + `useOutfits`** | ❌ MVP — needs port (D.7) | Legacy: `src/app/(main)/[lang]/outfits/page.tsx`, `src/components/Outfit*.tsx`, `src/hooks/useOutfits.ts` (if exists) |
-| Outfit detail page | ❌ MVP — needs port (D.7) | Legacy: `src/app/(main)/[lang]/outfits/[id]/page.tsx` |
-| **Lookbook page** (saved outfits) | ❌ Doesn't exist yet (D.8) | Legacy: `src/app/(main)/[lang]/lookbook/page.tsx` |
+| Outfits page + `OutfitCard` + `OutfitHero` + `OutfitPiecesSheet` + `OutfitGridCell` + `useOutfits` | ✅ Ported (D.7a + D.7b) | `apps/web/src/app/(main)/[lang]/outfits/page.tsx`, `apps/web/src/components/Outfit*.tsx`, `apps/web/src/hooks/useOutfits.ts` |
+| Outfit detail page (standalone `/outfits/[id]`) | ✅ Ported (D.7b) | `apps/web/src/app/(main)/[lang]/outfits/[id]/page.tsx` |
+| Lookbook page (saved outfits) | ✅ Ported (D.8) | `apps/web/src/app/(main)/[lang]/lookbook/page.tsx` |
 | **Chat page + `ChatComposer` + `ChatMessage` + `ChatItemGrid` + `ChatOutfitGrid` + `ChatWardrobePicker` + `useChat`** | ❌ MVP — needs port (D.9). Switch from legacy NDJSON to our SSE endpoint. | Legacy: `src/app/(main)/[lang]/chat/page.tsx`, `src/components/Chat*.tsx`, `src/hooks/useChat.ts` |
 | **Dashboard page** | ❌ Doesn't exist yet (D.10) | Legacy: `src/app/(main)/[lang]/dashboard/page.tsx` |
-| Outfit detail (separate page vs inline) | TBD — read legacy outfit detail behavior in D.7 | |
 
 To verify the table is current, run `git log --oneline | head -30`
 and cross-reference against the most recent visual-port commit
@@ -402,6 +401,28 @@ When porting a new screen, look at how these were done:
   render. Caused infinite `auth.whoami` re-fetches → browser
   `ERR_INSUFFICIENT_RESOURCES`. Fix: hold `execute` in a ref, drop
   `fetchProfile` deps to `[]`. See pitfall #11.
+- **`c5d05e9` + `5feaff1` + `bf623e8` — Phase D.7a + D.7b + auth-race
+  fix**: D.7a is the largest backend slice — schema migration
+  (`feedback`, `saved_at`, `name`, `wardrobe_assessment` columns),
+  rich `outfitShape.ts` (joins outfits → outfit_items → closet_items
+  → item_photos + try_on_jobs latest + contexts; signs URLs in one
+  pass), `tryon.generate` refactored to enqueue via pg-boss and
+  return jobId immediately (was sync-blocking 30–90s; legacy UI
+  required async), 5 latent bugs fixed. D.7b ports the 877-line
+  outfits page + 4 components + `useOutfits` hook with try-on
+  polling, optimistic mutations, and `triggeredTryOnsRef` guard
+  against double-tap. `bf623e8` follow-up unblocks rendering on a
+  Supabase auth race surfaced by D.7b's hooks.
+- **`583a89e` — Phase D.8 (lookbook)**: small surface, real
+  plumbing. `outfit.list` gained explicit `orderBy: 'createdAt' |
+  'savedAt' | 'wornAt'` arg (default `'createdAt'`); `useOutfits`
+  gained `savedOnly` opt with primitive destructure at the top of
+  the hook (pitfall #11 in a different shape — see #13);
+  `toggleSave` lifts legacy lookbook L168–179 (filter out of local
+  list when `savedOnly && !saved`). New 314-line page reuses every
+  D.7b component unmodified. Zero i18n + zero schema changes — the
+  `dict.lookbook` namespace and the `/lookbook` nav wiring were
+  already in place from earlier ports.
 
 ---
 
@@ -518,6 +539,24 @@ them to Luke before starting D.7.
     each capability — that's the spread-across-files reshape that
     PORT.md flags as residue. When you spot the same shape adapter
     appearing in 2+ files, extract it.
+
+13. **Options-object hook args without primitive destructure.**
+    Variant of #11. When a hook accepts `(opts?: { foo?: bool })`,
+    `opts` is a fresh object every render — its identity changes
+    even when `foo` doesn't. If the hook references `opts` (or
+    `opts.foo`) inside a `useEffect` / `useCallback` dep array, the
+    effect re-fires every render → re-fetches, re-subscribes,
+    infinite loops. D.8's `useOutfits({ savedOnly })` hit this.
+    Fix: destructure to a primitive at the top of the hook
+    BEFORE any dep array touches it:
+    ```ts
+    function useOutfits(opts?: { savedOnly?: boolean }) {
+      const { savedOnly = false } = opts ?? {};   // primitive — stable identity
+      // ...all useEffects + useCallbacks reference savedOnly, NOT opts
+    }
+    ```
+    Same shape as pitfall #11 (unstable reference in dep array);
+    different surface (callback wrapper vs object identity).
 
 ---
 

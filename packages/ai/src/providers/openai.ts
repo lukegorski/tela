@@ -13,6 +13,26 @@ import type {
   StreamEvent,
 } from '../types.js';
 
+/**
+ * OpenAI's tool/function name regex is `^[a-zA-Z0-9_-]+$` — no dots. Our
+ * capability namespace uses dotted names (`wardrobe.addItem`,
+ * `outfit.generate`). Map both directions only here, at the provider
+ * boundary; the rest of the codebase keeps using dotted names so dict
+ * keys, event labels, and the registry stay readable.
+ *
+ * Round-trip is safe given current capability naming: domain + action
+ * are camelCase with no underscores, so `.` ↔ `_` is unambiguous. If we
+ * ever introduce an underscore in a capability name, switch to a
+ * per-request Map<encoded, original>.
+ */
+function encodeToolName(capabilityName: string): string {
+  return capabilityName.replace(/\./g, '_');
+}
+
+function decodeToolName(toolName: string): string {
+  return toolName.replace(/_/g, '.');
+}
+
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI;
 
@@ -106,7 +126,7 @@ export class OpenAIProvider implements AIProvider {
             msg.tool_calls = m.toolCalls.map((tc) => ({
               id: tc.id,
               type: 'function' as const,
-              function: { name: tc.name, arguments: JSON.stringify(tc.args) },
+              function: { name: encodeToolName(tc.name), arguments: JSON.stringify(tc.args) },
             }));
           }
           return msg;
@@ -126,7 +146,7 @@ export class OpenAIProvider implements AIProvider {
     const openaiTools: OpenAI.ChatCompletionTool[] | undefined = params.tools?.map((t) => ({
       type: 'function' as const,
       function: {
-        name: t.name,
+        name: encodeToolName(t.name),
         description: t.description,
         parameters: t.parameters,
       },
@@ -162,7 +182,9 @@ export class OpenAIProvider implements AIProvider {
           }`,
         );
       }
-      return { id: tc.id, name: tc.function.name, args };
+      // Decode the tool name back to our dotted capability namespace.
+      // dispatchTool, the registry, and event payloads all expect dotted names.
+      return { id: tc.id, name: decodeToolName(tc.function.name), args };
     });
 
     return {
@@ -214,7 +236,7 @@ export class OpenAIProvider implements AIProvider {
             msg.tool_calls = m.toolCalls.map((tc) => ({
               id: tc.id,
               type: 'function' as const,
-              function: { name: tc.name, arguments: JSON.stringify(tc.args) },
+              function: { name: encodeToolName(tc.name), arguments: JSON.stringify(tc.args) },
             }));
           }
           return msg;

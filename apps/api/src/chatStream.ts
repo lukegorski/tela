@@ -81,20 +81,18 @@ export function mountChatStream(app: Hono): void {
       };
 
       try {
-        // Run the chat turn inside the user's request context. The generator
-        // yields events as work progresses; we forward each to the client.
-        const generator = runInContext(requestContext, () => streamChatTurn(parsed.data));
-
-        // runInContext returns the generator value but doesn't propagate the
-        // ALS context across awaits in the consumer. We re-enter the context
-        // around each next() call to keep getRequestContext() valid inside
-        // the generator body.
-        // (AsyncLocalStorage propagates correctly across `await` inside a
-        // single `run()` callback. As long as the generator is iterated
-        // inside that callback, we're fine.)
-        for await (const event of generator) {
-          await send(event);
-        }
+        // Run the WHOLE iteration inside runInContext so the AsyncLocalStorage
+        // context is unambiguously active across every yield boundary. The
+        // earlier shape (`runInContext(...) => generator; for await outside`)
+        // intermittently dropped context when streamChatTurn fanned out tool
+        // calls via Promise.all — Node's ALS propagation through generators
+        // iterated *outside* their original run() is fragile, especially
+        // when concurrent microtasks get interleaved.
+        await runInContext(requestContext, async () => {
+          for await (const event of streamChatTurn(parsed.data)) {
+            await send(event);
+          }
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error({ err, userId: requestContext.userId }, 'chat stream failed');

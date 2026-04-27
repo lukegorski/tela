@@ -129,12 +129,15 @@ interface TryOnRow {
  * Fetch one or many outfits joined with their items, photos, context, and
  * latest try-on job — all signed URLs minted in one pass.
  *
- * Ordered newest-first. Pass `outfitId` for a single fetch, `savedOnly` for
- * lookbook, or neither for the full list.
+ * Ordered newest-first. Pass `outfitId` for a single fetch, `outfitIds`
+ * for a specific set (used by `outfit.generate` to return its just-
+ * persisted rows in rich shape), `savedOnly` for lookbook, or none of
+ * these for the full list.
  */
 export async function fetchRichOutfits(opts: {
   userId: string;
   outfitId?: string;
+  outfitIds?: string[];
   savedOnly?: boolean;
   orderBy?: 'createdAt' | 'savedAt' | 'wornAt';
   limit?: number;
@@ -145,6 +148,9 @@ export async function fetchRichOutfits(opts: {
   // ─── Outfits + context (single join) ───
   const conditions = [eq(outfits.userId, opts.userId)];
   if (opts.outfitId) conditions.push(eq(outfits.id, opts.outfitId));
+  if (opts.outfitIds && opts.outfitIds.length > 0) {
+    conditions.push(inArray(outfits.id, opts.outfitIds));
+  }
   if (opts.savedOnly) conditions.push(eq(outfits.saved, true));
 
   const outfitQuery = db

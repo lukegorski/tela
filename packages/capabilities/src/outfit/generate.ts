@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { eq, and, desc, inArray } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import {
   getDb,
@@ -15,6 +15,7 @@ import { getPrompt } from '@tela/prompts';
 import { logEvent } from '@tela/events';
 import { registerCapability } from '../registry.js';
 import { getRequestContext } from '../context/requestContext.js';
+import { fetchRichOutfits, richOutfitSchema } from './outfitShape.js';
 
 const roleSchema = z.enum(['top', 'bottom', 'dress', 'shoes', 'outerwear', 'accessory']);
 
@@ -38,21 +39,8 @@ const input = z.object({
   count: z.number().int().min(1).max(5).default(3),
 });
 
-const outfitOutputSchema = z.object({
-  outfitId: z.string().uuid(),
-  name: z.string(),
-  items: z.array(
-    z.object({
-      closetItemId: z.string().uuid(),
-      role: roleSchema,
-    }),
-  ),
-  rationale: z.string(),
-  pairingKey: z.string(),
-});
-
 const output = z.object({
-  outfits: z.array(outfitOutputSchema),
+  outfits: z.array(richOutfitSchema),
   generationId: z.string().uuid(),
   costCents: z.number(),
   duplicatesRejected: z.number(),
@@ -62,7 +50,7 @@ export const generateOutfits = registerCapability({
   name: 'outfit.generate',
   chatTool: true,
   description:
-    "Generate outfit suggestions for a user given a context. Uses the user's style profile, the styling rules, and their wardrobe. Deduplicates against previously-generated outfits via pairing keys.",
+    "Generate outfit suggestions for a user given a context. Returns rich outfit objects with item images and signed URLs ready for display. Uses the user's style profile, the styling rules, and their wardrobe. Deduplicates against previously-generated outfits via pairing keys.",
   input,
   output,
 
@@ -159,7 +147,7 @@ export const generateOutfits = registerCapability({
 
     // ─── Validate, dedupe, persist ───
     const validItemIds = new Set(seasonRelevant.map((i) => i.id));
-    const savedOutfits: z.infer<typeof outfitOutputSchema>[] = [];
+    const savedOutfitIds: string[] = [];
     let duplicatesRejected = 0;
 
     for (const candidate of parsed.data.outfits) {
@@ -204,20 +192,19 @@ export const generateOutfits = registerCapability({
         })),
       );
 
-      savedOutfits.push({
-        outfitId: outfit.id,
-        name: candidate.name,
-        items: candidate.items,
-        rationale: candidate.rationale,
-        pairingKey,
-      });
+      savedOutfitIds.push(outfit.id);
     }
 
-    if (savedOutfits.length === 0) {
+    if (savedOutfitIds.length === 0) {
       throw new Error(
         `AI produced ${parsed.data.outfits.length} outfits but all were rejected (duplicates or invalid items).`,
       );
     }
+
+    // Re-fetch the just-persisted rows in the rich shape (joined items +
+    // signed URLs + latest try-on) so the chat can render outfit cards
+    // immediately and the outfits page can drop its post-generate refetch.
+    const richOutfits = await fetchRichOutfits({ userId, outfitIds: savedOutfitIds });
 
     await logEvent({
       userId,
@@ -225,14 +212,14 @@ export const generateOutfits = registerCapability({
       source,
       payload: {
         contextId,
-        outfitCount: savedOutfits.length,
+        outfitCount: savedOutfitIds.length,
         duplicatesRejected,
         generationId: result.provenance.generationId,
       },
     });
 
     return {
-      outfits: savedOutfits,
+      outfits: richOutfits,
       generationId: result.provenance.generationId,
       costCents: result.provenance.costCents,
       duplicatesRejected,

@@ -157,8 +157,10 @@ export function useOutfits(opts?: { savedOnly?: boolean }) {
   /**
    * Generate a single outfit for the given occasion. Mirrors legacy:
    * builds context client-side via context.assemble, then calls
-   * outfit.generate, then refetches. Optimistic insert at the top so
-   * the new cell shows immediately when the generate spinner clears.
+   * outfit.generate. Since D.9c the capability returns the rich shape
+   * (items + signed URLs + initial tryOn=null) inline, so we just prepend
+   * to local state — no refetch needed. The spinner cell hides as soon
+   * as setOutfits runs.
    */
   const generateOutfit = useCallback(
     async (occasion?: string) => {
@@ -175,17 +177,13 @@ export function useOutfits(opts?: { savedOnly?: boolean }) {
           name: "outfit.generate",
           input: { contextId: ctx.contextId, count: 1 },
         })) as {
-          outfits: Array<{ outfitId: string }>;
+          outfits: Outfit[];
           generationId: string;
           duplicatesRejected: number;
         };
 
-        // Refetch picks up the new rows in the rich shape (with items +
-        // signed URLs). Optimistic prepend would require fabricating the
-        // signed URLs, so we just refetch — the spinner cell hides as
-        // soon as setOutfits runs.
         if (generated.outfits.length > 0) {
-          await refetch();
+          setOutfits((prev) => [...generated.outfits, ...prev]);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -195,7 +193,7 @@ export function useOutfits(opts?: { savedOnly?: boolean }) {
         setGenerating(false);
       }
     },
-    [userId, refetch],
+    [userId],
   );
 
   const toggleSave = useCallback(

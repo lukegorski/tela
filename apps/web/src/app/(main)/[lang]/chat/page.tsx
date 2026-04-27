@@ -210,8 +210,9 @@ function StreamingMessage({
 
 /**
  * Detect whether a value looks like a renderable rich Outfit (has id +
- * items[] with imageUrl). outfit.generate returns just IDs + role, so
- * those won't pass — only rich shapes from outfit.list / outfit.get.
+ * items[] with imageUrl). All chatTool capabilities that return outfits
+ * (outfit.generate, outfit.list, outfit.get) return the rich shape since
+ * D.9c, so this guard mostly keeps us safe against future shape drift.
  */
 function looksLikeRichOutfit(value: unknown): value is Outfit {
   if (!value || typeof value !== "object") return false;

@@ -44,7 +44,11 @@ export const generateTryOn = registerCapability({
     'Enqueue a Fashn try-on for an outfit and return the jobId immediately. Pipeline runs in a background worker; poll tryon.getStatus to drive UI. Returns a cached complete job if one exists and force=false.',
   input,
   output,
-  chatTool: true,
+  // Intentionally NOT exposed to chat: try-on requires polling for the
+  // result image, and the chat transcript has no polling path. Users are
+  // routed to the Outfits page (where useOutfits handles the polling
+  // loop). The chat.system prompt instructs the LLM to direct try-on
+  // requests there + offer outfit.save so the outfit shows up on /outfits.
 
   async execute({ outfitId, force }) {
     const { userId } = getRequestContext();

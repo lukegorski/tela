@@ -23,3 +23,4 @@ export {
   type TryOnStep,
 } from './stubs.js';
 export { rateLimits } from './rateLimits.js';
+export { migrationLog, migrationFailures } from './migration.js';

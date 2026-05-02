@@ -423,6 +423,31 @@ When porting a new screen, look at how these were done:
   D.7b component unmodified. Zero i18n + zero schema changes — the
   `dict.lookbook` namespace and the `/lookbook` nav wiring were
   already in place from earlier ports.
+- **`e269316` + `5865f74` + `3f21ace` + `0acc4a2` — Phase 11 preview
+  (Luke one-shot migration)**: schema migration 0013 added
+  `migration_log` (success-only, ID map, UNIQUE constraint) +
+  `migration_failures` (append-only debug log). Library at
+  `packages/capabilities/src/migration/migrateLegacyUser.ts` does
+  Firebase → Supabase data + image transfer in per-entity Drizzle
+  txns with bounded concurrency, HEIC pre-flight, retry. Synthetic
+  contexts/generations with deterministic legacy_id keys
+  (`'synthetic:context:${occasion}:${season}'`,
+  `'synthetic:generation:${legacyUid}'`) so re-runs are idempotent.
+  Outfit migration uses the partial-items rule (keep outfit if
+  surviving items satisfy `top|dress + bottom|dress`). 19/19
+  wardrobe items + 16/16 outfits migrated for Luke's account.
+  CLI shell at `packages/capabilities/scripts/migrate-user-from-legacy.ts`
+  is throwaway; library is reusable for the eventual Phase 11
+  multi-user flow. See `docs/migration-luke-one-shot.md` for the full
+  spec.
+- **`189ff81` — pgbouncer fix (system-wide)**: critical infra fix
+  surfaced during the migration run. Supabase's transaction-mode
+  pooler doesn't support prepared statements across rebound
+  connections; the migration's parallel txns silently rolled back.
+  Fix detects the pooler URL and passes `prepare: false` to
+  postgres-js. Affects the entire shared `db` client — any future
+  parallel-write workload (chat batch, admin bulk, etc.)
+  automatically benefits. See pitfall #14 for the symptom checklist.
 
 ---
 
@@ -557,6 +582,43 @@ them to Luke before starting D.7.
     ```
     Same shape as pitfall #11 (unstable reference in dep array);
     different surface (callback wrapper vs object identity).
+
+14. **pgbouncer transaction-mode pooler + prepared statements +
+    parallel transactions = silent rollback.** The migration script
+    found this the hard way (commit `189ff81`). Supabase's
+    transaction-mode pooler (port `6543`, hostname pattern
+    `*.pooler.supabase.com`) rebinds each query to a different
+    backend connection, so prepared statements set up on one
+    connection aren't visible on the next. Under parallel-transaction
+    load (e.g., the migration's bounded-concurrency wardrobe-item
+    txns) this manifests as **silent transaction rollbacks** — the
+    `db.transaction(async (tx) => ...)` callback returns successfully,
+    but the rows never persist. **No exception, no log line, no
+    pre-fix retry.** Migration reported "9/19 done" but only some
+    rows actually landed; the synthetic generation insert silently
+    rolled back too, taking the dependent outfit inserts down with FK
+    violations downstream.
+
+    **Fix is in `packages/db/src/client.ts`**: detect the pooler URL
+    pattern and pass `prepare: false` to `postgres-js`. Affects the
+    entire shared client, so any future workload — chat batch
+    operations, admin bulk imports, parallel-write capabilities —
+    automatically benefits.
+
+    **Trap to avoid going forward**: any new code that does parallel
+    Drizzle transactions through the shared client is now safe.
+    But if a future capability bypasses the shared client and creates
+    its own `postgres()` connection, that one needs `prepare: false`
+    too when `DATABASE_URL` points at the pooler. The detection
+    helper in `client.ts` is the canonical place — reuse it.
+
+    Symptom checklist if this re-emerges:
+    - `db.transaction()` callback returns success
+    - No errors logged anywhere
+    - Subsequent queries can't find the rows that "succeeded"
+    - Sequential single-statement queries through the same URL work fine
+    - Only parallel-txn workloads fail
+    - DATABASE_URL contains `:6543` or `pooler.supabase.com`
 
 ---
 

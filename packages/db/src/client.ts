@@ -17,10 +17,20 @@ export function getDb() {
     throw new Error('DATABASE_URL environment variable is required');
   }
 
+  // Supabase's transaction-mode pooler (port 6543, host *.pooler.supabase.com)
+  // is incompatible with prepared statements: pgbouncer rebinds each query
+  // to a different backend connection, so the prepared statement set up on
+  // one connection isn't visible on the next, leading to silent transaction
+  // rollbacks under parallel load. Disable prepared statements when we
+  // detect we're going through the pooler. Direct connections (port 5432)
+  // keep prepared statements on for the small perf win.
+  const isPgBouncer = /pooler|:6543/.test(databaseUrl);
+
   _sql = postgres(databaseUrl, {
     max: 10,
     idle_timeout: 20,
     connect_timeout: 10,
+    prepare: !isPgBouncer,
   });
 
   _db = drizzle(_sql, { schema });

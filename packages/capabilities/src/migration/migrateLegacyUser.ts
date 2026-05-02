@@ -20,7 +20,7 @@
  * (append-only).
  */
 import { createHash } from 'node:crypto';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import {
   getDb,
   users,
@@ -172,12 +172,17 @@ export async function resolveIdsByEmail(email: string): Promise<{
     );
   }
 
-  // New side — Supabase users table lookup by email
+  // New side — Supabase users table lookup by email. Case-insensitive
+  // because users.email is varchar (case-sensitive) but Supabase Auth
+  // normalizes to lowercase on signup; defending against any seeded /
+  // imported rows whose casing didn't get normalized.
   const db = getDb();
-  const newUser = await db.query.users.findFirst({
-    where: eq(users.email, lower),
-    columns: { id: true, email: true },
-  });
+  const matches = await db
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(sql`lower(${users.email}) = ${lower}`)
+    .limit(1);
+  const newUser = matches[0];
   if (!newUser) {
     throw new Error(
       `ERROR: No new-app account found for email ${lower}.\n` +
@@ -390,6 +395,24 @@ async function migrateWardrobe(args: {
         }
       }),
     );
+  }
+
+  // Reconcile closets.item_count after the bulk insert. addItem +
+  // removeItem mutate it incrementally; bypassing them here means the
+  // denormalized count would otherwise drift to 0 + N-deletions. No
+  // user-facing code reads this value today (admin pages re-derive via
+  // SELECT count(*)), but removeItem reads it to decrement, so leaving
+  // it stale would surface as a "ghost item" if the user later removes
+  // an imported item.
+  if (!dryRun && closetId) {
+    const db = getDb();
+    await db
+      .update(closets)
+      .set({
+        itemCount: sql`(SELECT count(*)::int FROM ${closetItems} WHERE ${closetItems.closetId} = ${closets.id})`,
+        lastUpdatedAt: new Date(),
+      })
+      .where(eq(closets.id, closetId));
   }
 
   return stats;

@@ -674,6 +674,28 @@ async function migrateOutfits(args: {
 
   if (legacyOutfits.length === 0) return stats;
 
+  // Dry-run preview map: legacyItemId → category. In real-run, items have
+  // already been INSERTed into migration_log by the wardrobe phase, so the
+  // outfit lookup resolves them via DB. In dry-run, nothing is written, so
+  // we read legacy wardrobe items here and use that as the source of truth
+  // for structural validation. Without this, every outfit would falsely
+  // report "0/N items resolved → structural validation failed."
+  let legacyItemCategories: Map<string, string> | null = null;
+  if (dryRun) {
+    log(`outfits: dry-run — pre-fetching legacy wardrobe items to simulate item resolution`);
+    const itemsSnap = await legacyDb
+      .collection('users')
+      .doc(legacyUid)
+      .collection('wardrobeItems')
+      .get();
+    legacyItemCategories = new Map();
+    for (const doc of itemsSnap.docs) {
+      const data = doc.data() as { analysis?: { category?: string } };
+      const cat = data.analysis?.category;
+      if (cat) legacyItemCategories.set(doc.id, cat);
+    }
+  }
+
   // Cache for synthetic context UUIDs within this run, keyed on
   // 'occasion::season'. Values come from migration_log when present, else
   // are inserted on first use.
@@ -689,6 +711,7 @@ async function migrateOutfits(args: {
         legacyUid,
         newUserId,
         contextCache,
+        legacyItemCategories,
         getOrCreateGeneration: async () => {
           if (syntheticGenerationId) return { id: syntheticGenerationId, created: false };
           const r = await getOrCreateSyntheticGeneration({ legacyUid, newUserId, dryRun });
@@ -735,13 +758,29 @@ async function migrateOneOutfit(args: {
   legacyUid: string;
   newUserId: string;
   contextCache: Map<string, string>;
+  /**
+   * Dry-run only: legacy item-id → category, used to simulate what
+   * migrateWardrobe WOULD have inserted into migration_log. In real-run
+   * we read migration_log directly (it's been populated by now).
+   */
+  legacyItemCategories: Map<string, string> | null;
   getOrCreateGeneration: () => Promise<{ id: string; created: boolean }>;
   recordContextCreated: () => void;
   dryRun: boolean;
   idx: number;
   total: number;
 }): Promise<OutfitOutcome> {
-  const { outfit, newUserId, contextCache, getOrCreateGeneration, recordContextCreated, dryRun, idx, total } = args;
+  const {
+    outfit,
+    newUserId,
+    contextCache,
+    legacyItemCategories,
+    getOrCreateGeneration,
+    recordContextCreated,
+    dryRun,
+    idx,
+    total,
+  } = args;
   log(`outfit ${idx}/${total}: ${outfit.id} — start`);
 
   const db = getDb();
@@ -759,28 +798,40 @@ async function migrateOneOutfit(args: {
     }
   }
 
-  // Resolve item IDs via migration_log.
+  // Resolve items.
+  // - Real-run: items are in migration_log (wardrobe phase already wrote them).
+  //             Look up newId + category via the log → closet_items join.
+  // - Dry-run:  migration_log is empty. Use the pre-fetched legacy-category map
+  //             so structural validation reflects what real-run WOULD do.
   const legacyItemIds = outfit.items ?? [];
   if (legacyItemIds.length === 0) {
     return { skipped: true, reason: 'outfit has no items' };
   }
 
   const validItems: Array<{ legacyId: string; newId: string; category: string }> = [];
-  for (const legacyItemId of legacyItemIds) {
-    const logRow = await db.query.migrationLog.findFirst({
-      where: and(
-        eq(migrationLog.userId, newUserId),
-        eq(migrationLog.legacyEntityType, 'wardrobe_item'),
-        eq(migrationLog.legacyId, legacyItemId),
-      ),
-    });
-    if (!logRow) continue;
-    const itemRow = await db.query.closetItems.findFirst({
-      where: eq(closetItems.id, logRow.newId),
-      columns: { id: true, category: true },
-    });
-    if (!itemRow) continue;
-    validItems.push({ legacyId: legacyItemId, newId: itemRow.id, category: itemRow.category });
+  if (dryRun && legacyItemCategories) {
+    for (const legacyItemId of legacyItemIds) {
+      const cat = legacyItemCategories.get(legacyItemId);
+      if (!cat) continue;
+      validItems.push({ legacyId: legacyItemId, newId: 'dry-run', category: cat });
+    }
+  } else {
+    for (const legacyItemId of legacyItemIds) {
+      const logRow = await db.query.migrationLog.findFirst({
+        where: and(
+          eq(migrationLog.userId, newUserId),
+          eq(migrationLog.legacyEntityType, 'wardrobe_item'),
+          eq(migrationLog.legacyId, legacyItemId),
+        ),
+      });
+      if (!logRow) continue;
+      const itemRow = await db.query.closetItems.findFirst({
+        where: eq(closetItems.id, logRow.newId),
+        columns: { id: true, category: true },
+      });
+      if (!itemRow) continue;
+      validItems.push({ legacyId: legacyItemId, newId: itemRow.id, category: itemRow.category });
+    }
   }
 
   log(`outfit ${idx}/${total}: ${outfit.id} — items resolved (${validItems.length}/${legacyItemIds.length})`);

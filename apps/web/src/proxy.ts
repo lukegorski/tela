@@ -5,15 +5,20 @@
  * 2. Redirect locale-less paths (e.g. /wardrobe) to a locale-prefixed
  *    path (e.g. /en/wardrobe) based on the user's Accept-Language header.
  *
- * Routes that don't take a locale prefix (/admin under (admin) route
- * group, /auth/* OAuth callback + sign-out, /trpc, /chat/stream, Next
- * internals) are exempt from locale routing.
+ * Routes that don't take a locale prefix (/auth/* OAuth callback +
+ * sign-out, /trpc, /chat/stream, Next internals) are exempt from
+ * locale routing.
+ *
+ * Note: /admin used to live in this app under the (admin) route group.
+ * It was removed (Phase 14 prep) — the new admin lives at
+ * admin.telastyle.app via a separate apps/admin Next service. This app
+ * (apps/web) MUST NOT serve any /admin path.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { detectLocaleFromHeader, isLocale } from '@/lib/i18n';
 
-const LOCALE_EXEMPT_PREFIXES = ['/admin', '/auth', '/api', '/trpc', '/chat/stream', '/_next'];
+const LOCALE_EXEMPT_PREFIXES = ['/auth', '/api', '/trpc', '/chat/stream', '/_next'];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

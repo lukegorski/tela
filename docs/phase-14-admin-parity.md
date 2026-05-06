@@ -388,12 +388,542 @@ Manual ops work — Luke does this:
 
 ---
 
-## 5 decisions Luke must lock before 14a starts
+## 6 architectural decisions — ALL LOCKED
 
-1. **P1**: AdminAiChat — port dedicated surface (Option A, ~3-4 days more) OR reuse /chat with admin gating (Option B, ~0.5 days)?
-2. **P2**: `/admin/stylist` — redirect to /admin/rules (Option A, recommended) OR landing page (Option B) OR drop URL entirely (Option C)?
-3. **P3**: AI panel slide-out — port (only viable if P1=A) OR drop (recommended)?
-4. **P4**: DNS cutover timing — end of 14a (cofounder gets partial admin) OR end of 14b (recommended, defer cut to full parity)?
-5. **P5**: Activity event mapping — confirm mapping table is correct; OK to add `auth.onboarding_completed` to event taxonomy if needed?
+1. **P1 — Port AdminAiChat as dedicated surface** (Option A). Slide-out
+   panel + `/admin/ai` page. ~4-5 days work.
+2. **P2 — `/admin/stylist` redirects to `/admin/rules`** (Option A).
+   Nav unchanged (5 tabs); existing 3-surface architecture
+   (rules + examples + prompts) stays.
+3. **P3 — Port AI panel slide-out** (Option A, contingent on P1=A
+   confirmed). 420px right-side slide-out, persists state in
+   `localStorage["adminAiPanelOpen"]`, desktop only. Mobile uses
+   `/admin/ai` full-page.
+4. **P4 — DNS cut at end of full parity = end of 14c** (per added
+   sub-phase below).
+5. **P5 — Port legacy activity event mapping verbatim**. Build
+   `formatActivityEvent` helper that maps our event types to the
+   same English labels legacy uses. Add `auth.onboarding_completed`
+   to event taxonomy if missing. Verify `outfit.unsaved` exists.
+6. **P6 — AdminAiChat persists; team-shared visibility.** Reuse
+   `chat_conversations` + `chat_messages` with new
+   `is_admin_chat: boolean` column. Any admin sees any admin chat
+   (per "internal team can revisit"). Migration 0014 adds the column.
 
-Once locked, I'll write session-start prompts for 14a and 14b.
+Plus three implementation choices locked from reading the legacy
+backend (`/api/admin/ai/chat/route.ts`):
+
+7. **Anthropic Claude for admin chat** (matches legacy + orange
+   ClaudeIcon brand). User chat stays on OpenAI. Our @tela/ai
+   gateway already supports both providers.
+8. **`currentRoute` system prompt context.** Admin's current admin
+   page (e.g., `/admin/users/abc`) is passed to the system prompt
+   builder so the AI has page-aware context for tool calls.
+9. **Reuse capability registry with admin filter inclusion**, not
+   a separate admin tool list. Add `buildToolCatalog({ includeAdmin:
+   true })` variant that includes `requiresAdmin` capabilities for
+   admin chat. Regular `/chat` keeps the current filter (excludes
+   admin tools). Admin chat sees all 17 admin capabilities
+   automatically.
+
+---
+
+## D.14c — AdminAiChat surface + DNS cut
+
+Added per critique: AdminAiChat is substantial enough (~4-5 days)
+to be its own sub-phase. P4 re-interpreted: DNS cuts at the end of
+full parity = end of 14c.
+
+### Schema migration 0014
+
+```sql
+ALTER TABLE chat_conversations ADD COLUMN is_admin_chat BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX chat_conversations_is_admin_chat_idx ON chat_conversations(is_admin_chat) WHERE is_admin_chat = TRUE;
+```
+
+Partial index (`WHERE is_admin_chat = TRUE`) keeps the index small —
+admin chats are rare relative to user chats. Queries for "list all
+admin chats" use this index; user chat queries are unaffected.
+
+### New capabilities (all `requiresAdmin: true`)
+
+| Capability | Input | Output | Notes |
+|---|---|---|---|
+| `admin.streamChatTurn` | `{ conversationId?, message, currentRoute? }` | SSE generator (mirrors `streamChatTurn`) | Same shape as user `streamChatTurn` but: uses Anthropic provider, sets `is_admin_chat: true` on new conversations, passes `currentRoute` to system prompt, calls `buildToolCatalog({ includeAdmin: true })`. Likely a separate generator file `packages/capabilities/src/admin/streamAdminChat.ts` to avoid mixing concerns. |
+| `admin.listAdminChats` | `{ limit?: number, offset?: number }` | `{ conversations: AdminChatSummary[], hasMore: boolean }` | Lists ALL `chat_conversations WHERE is_admin_chat = TRUE` regardless of `user_id`. Sorted `last_message_at DESC`. Each summary includes the admin user's email/displayName who started it. |
+| `admin.getAdminChat` | `{ conversationId }` | `{ id, title, messages: ChatMessage[], startedBy: { email, displayName } }` | Like `chat.getConversation` but allows reading any admin chat (any admin can read any other admin's chat per P6). |
+
+### `@tela/ai` extensions
+
+- Add `provider: 'openai' | 'anthropic'` parameter to `callMultiStream`
+  (or check `model` prefix). Anthropic provider already exists in
+  `packages/ai/src/providers/anthropic.ts` (per memory: "Anthropic
+  Claude Sonnet 4 for admin tooling").
+- Verify `chatMultiStream` is implemented for the Anthropic provider.
+  If not, add it (mirrors OpenAI implementation).
+
+### `apps/api` SSE endpoint
+
+Add `POST /admin/chat/stream` route that calls
+`admin.streamChatTurn` (same SSE event format as `/chat/stream`:
+`user-saved`, `thinking`, `tool-start`, `tool-end`, `text-delta`,
+`done`, `error`). Gate on `requiresAdmin` (whoami.isAdmin === true).
+
+### `apps/admin` surfaces
+
+- **Slide-out panel** — port the `<AdminAiPanel>` component from
+  legacy AdminShell (lines 208-237 of legacy `AdminShell.tsx`).
+  420px desktop, fixed-position right side, persists open/closed in
+  `localStorage["adminAiPanelOpen"]`. Defaults open on first visit.
+- **Full-page `/admin/ai`** — render `<AdminAiChat variant="page" />`.
+  Used on mobile (where slide-out doesn't fit) and as a permanent
+  surface for the "AI" hamburger menu link.
+- **`AdminAiChat` component** — port from legacy
+  `src/components/AdminAiChat.tsx` (444 lines). Two variants
+  (`panel` | `page`), conversation list sidebar, current conversation
+  pane with streaming, message persistence via the new capabilities.
+- **`ClaudeIcon` SVG** — port verbatim from legacy AdminShell
+  (lines 25-30, the orange `#d97757` Anthropic-branded icon).
+
+### Conversation list UI (sidebar)
+
+Per P6 = team-shared, the AdminAiChat sidebar shows ALL admin
+conversations (any admin's), sorted by recency. Each row shows:
+- Conversation title (auto-derived from first user message)
+- Started-by avatar + name (so cofounder knows who initiated)
+- Last activity timestamp
+- Click to open that conversation in main pane
+
+This is a transparency feature: any admin can audit / continue any
+other admin's session.
+
+### DNS cut (end of 14c)
+
+Manual ops work — Luke does this:
+1. Verify all 11 admin pages render correctly on Railway URL
+   (8 from 14a + 3 from 14b)
+2. Verify AdminAiChat works (panel opens, messages stream, history
+   persists, conversation list shows team chats)
+3. Update DNS: `admin.telastyle.app` CNAME → Railway admin service
+4. Wait for DNS propagation (5 min - 24 hours)
+5. Verify `admin.telastyle.app` serves the new admin
+6. Keep legacy admin alive on Vercel for 1 week as fallback
+7. After 1 week: tear down legacy admin
+
+---
+
+## Updated scope estimate
+
+| Sub-phase | Estimate | Deliverable |
+|---|---|---|
+| 14a | 3-4 days | apps/admin scaffolded, 8 existing pages recovered + visual parity, deployed to Railway URL (DNS NOT cut) |
+| 14b | 3-4 days | 5 new admin capabilities + 3 new pages (activity, chat, user-detail extended with 4 tabs) + activity event mapping |
+| 14c | 4-5 days | AdminAiChat (slide-out panel + /admin/ai page + persistence + Anthropic backend + admin tool catalog) + DNS cut |
+| **Total** | **2-3 weeks** | Full admin parity at admin.telastyle.app, legacy admin retired |
+
+---
+
+## 14a — session-start prompt
+
+Copy this into a fresh Claude Code session at `/Users/lukegorski/tela`:
+
+```
+You are scaffolding apps/admin and recovering existing admin pages
+from git history. Phase 14a of the admin parity workstream.
+
+WORKING DIR: /Users/lukegorski/tela
+LEGACY DIR: /Users/lukegorski/ale (READ-ONLY — visual reference)
+LEGACY ADMIN URL: https://admin.telastyle.app (still alive — visual reference)
+
+FULL SPEC: docs/phase-14-admin-parity.md (read cover to cover)
+
+══════════════════════════════════════════════════════════
+WHAT 14a SHIPS:
+══════════════════════════════════════════════════════════
+
+- New apps/admin Next service in the monorepo (mirrors apps/api,
+  apps/mcp, apps/web pattern)
+- 8 existing admin pages recovered from git history (commit fd4b451)
+- AdminShell-style chrome (top nav with 5 tabs USERS / ACTIVITY /
+  CHAT / COSTS / STYLIST + hamburger menu mobile)
+- Auth gate using Supabase JWT + users.is_admin (NOT legacy's
+  NEXT_PUBLIC_ADMIN_UID)
+- Visual parity pass against admin.telastyle.app for the 5 existing
+  pages (users, costs, examples, prompts, rules)
+- /admin/stylist redirects to /admin/rules
+- Deployed to a new Railway service at tela-admin-development.up.railway.app
+- DNS does NOT cut yet (admin.telastyle.app stays on legacy through 14c)
+
+NOT in 14a (deferred to 14b/14c):
+- 3 missing pages (activity, chat, user-detail with 4 tabs)
+- 5 new admin capabilities
+- AdminAiChat (slide-out panel + /admin/ai)
+- Anthropic provider extension
+
+══════════════════════════════════════════════════════════
+LOCKED ARCHITECTURAL CONTEXT (don't revisit):
+══════════════════════════════════════════════════════════
+
+P2: /admin/stylist redirects to /admin/rules (1-line page).
+P3: AI panel slide-out is part of 14c (NOT 14a — placeholder OK).
+Auth: users.is_admin boolean (NOT legacy's NEXT_PUBLIC_ADMIN_UID).
+Branding: keep "tela admin" + Tela logo top-left.
+Nav: 5 tabs in this order: USERS / ACTIVITY / CHAT / COSTS / STYLIST.
+Mobile: hamburger menu with slide-in right panel (matches main app
+Navbar pattern).
+i18n: admin is English-only. NO localePath, NO dictionaries imports.
+Layout: route group NOT used; apps/admin is a dedicated app with its
+own root layout.
+
+══════════════════════════════════════════════════════════
+SCAFFOLD CHECKLIST (apps/admin):
+══════════════════════════════════════════════════════════
+
+  apps/admin/package.json                    ("@tela/admin")
+  apps/admin/tsconfig.json                   (extend workspace base)
+  apps/admin/next.config.ts                  (copy from apps/web, trim)
+  apps/admin/postcss.config.mjs              (Tailwind 4 setup)
+  apps/admin/src/app/layout.tsx              (root layout)
+  apps/admin/src/app/page.tsx                (redirect to /users)
+  apps/admin/src/app/globals.css             (copy from apps/web)
+  apps/admin/.eslintrc.json                  (copy from apps/web)
+  apps/admin/src/lib/trpc/client.ts          (point at NEXT_PUBLIC_API_URL)
+  apps/admin/src/lib/supabase/{client,server}.ts (mirror apps/web)
+  Add to root pnpm-workspace.yaml
+  Add to root turbo.json pipeline
+  Add to root package.json scripts (dev, build, typecheck)
+  Update root pnpm verify script to include @tela/admin typecheck
+  Update scripts/check-no-residue.sh to scan apps/admin/src/
+
+apps/admin does NOT depend on @tela/db. Pure frontend calling apps/api
+via tRPC + Supabase auth client. No Doppler DB credentials needed.
+
+══════════════════════════════════════════════════════════
+RECOVERY (8 pages + 3 components + 6 lib helpers from fd4b451):
+══════════════════════════════════════════════════════════
+
+PRE_DELETE=fd4b451   # the commit BEFORE Step 1 deletion
+
+# 13 page files (incl. /admin redirect, layout, sub-routes)
+TARGET=apps/admin/src/app
+SOURCE='apps/web/src/app/(admin)/admin'
+for path in \
+  page.tsx layout.tsx \
+  costs/page.tsx \
+  examples/page.tsx examples/new/page.tsx 'examples/[exampleId]/page.tsx' \
+  prompts/page.tsx 'prompts/[name]/page.tsx' \
+  rules/page.tsx rules/new/page.tsx 'rules/[ruleId]/page.tsx' \
+  users/page.tsx 'users/[userId]/page.tsx'
+do
+  mkdir -p "$TARGET/$(dirname $path)"
+  git show ${PRE_DELETE}:${SOURCE}/${path} > "$TARGET/$path"
+done
+
+# 3 admin form components → apps/admin/src/components/
+mkdir -p apps/admin/src/components
+for f in ExampleForm.tsx PromptEditor.tsx RuleForm.tsx; do
+  git show ${PRE_DELETE}:apps/web/src/components/admin/$f > "apps/admin/src/components/$f"
+done
+
+# 6 admin lib helpers → apps/admin/src/lib/
+for f in admin-costs admin-examples admin-prompts admin-rules admin-stats admin-users; do
+  git show ${PRE_DELETE}:apps/web/src/lib/$f.ts > "apps/admin/src/lib/$f.ts"
+done
+
+After recovery, fix imports — anything @/components/X or @/lib/X
+in the recovered files needs to resolve to apps/admin's tsconfig
+path mapping. Add path aliases to apps/admin/tsconfig.json matching
+apps/web's pattern.
+
+ALSO add /admin/stylist redirect:
+  apps/admin/src/app/stylist/page.tsx → redirect('/rules')
+
+══════════════════════════════════════════════════════════
+ADMINSHELL CHROME (port from legacy, keep is_admin auth):
+══════════════════════════════════════════════════════════
+
+Port the chrome layout from legacy AdminShell.tsx (333 lines):
+- AdminNav: top bar with Tela logo (left) + 5 nav links (center,
+  desktop) + hamburger button (right, mobile)
+- 5 NAV_ITEMS in this order:
+    { href: '/users', label: 'Users' }
+    { href: '/activity', label: 'Activity' }
+    { href: '/chat', label: 'Chat' }
+    { href: '/costs', label: 'Costs' }
+    { href: '/stylist', label: 'Stylist' }   (redirects to /rules)
+- AdminGate: replaces legacy's NEXT_PUBLIC_ADMIN_UID check with our
+  isAdmin pattern:
+    Call auth.whoami via tRPC on mount. If whoami.isAdmin !== true,
+    show "This account does not have admin access." + sign-out button.
+    If unauthenticated, show AdminLogin (sign in with Google via
+    Supabase OAuth — same flow as apps/web).
+- Sliding mobile menu: matches apps/web's Navbar slide-in right
+  panel pattern (450ms ease-out, backdrop click closes, ESC key
+  closes, body scroll lock when open).
+- AI panel toggle button (Claude icon, top-right desktop) is a
+  placeholder in 14a — clicking shows "AI panel coming in Phase 14c"
+  toast, OR is hidden entirely until 14c. RECOMMEND: hide until 14c
+  to avoid dead UI.
+
+DO NOT port the AdminAiPanel slide-out yet (14c).
+
+══════════════════════════════════════════════════════════
+EXECUTION RULES:
+══════════════════════════════════════════════════════════
+
+- Legacy /Users/lukegorski/ale is READ-ONLY. Use admin.telastyle.app
+  in browser as the visual reference (run side-by-side with your
+  apps/admin localhost:3002).
+- Doppler required for any local run.
+- Two dev servers convention extends to three:
+    localhost:3000 — legacy (visual reference)
+    localhost:3001 — apps/web
+    localhost:3002 — apps/admin (your work)
+- Verify Luke's user has is_admin = TRUE in dev DB before testing
+  (otherwise apps/admin shows "no access" everywhere).
+- All admin pages are CSR (client components). Use 'use client'
+  at the top of every page.tsx.
+- Admin is English-only — NO i18n imports, NO localePath, NO
+  dict.* references in any admin page or component.
+- Recovered admin pages may have stale assumptions about capability
+  shapes. Run pnpm verify after recovery + fix anything that breaks.
+- Pitfall #11/#12/#13/#14 still apply — admin React code uses the
+  same hooks as apps/web.
+- Before commit: pnpm verify (includes new @tela/admin typecheck +
+  no-residue scan extended to apps/admin/src/).
+- Single commit (or split if natural break) → ASK before pushing.
+- After push: WAIT for Luke to deploy apps/admin to Railway + smoke
+  test at the Railway URL. DNS does NOT cut yet.
+
+══════════════════════════════════════════════════════════
+RAILWAY HAND-OFF (Luke does this manually after the push):
+══════════════════════════════════════════════════════════
+
+1. Create new Railway service "tela-admin-development"
+2. Connect to GitHub, build with `pnpm --filter @tela/admin build`,
+   start with `pnpm --filter @tela/admin start`
+3. Doppler integration for env vars (NEXT_PUBLIC_SUPABASE_URL,
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, NEXT_PUBLIC_API_URL)
+4. Smoke test at tela-admin-development.up.railway.app
+5. Add the Railway hostname to apps/api's CORS allowlist (separate
+   small commit if needed)
+
+DO NOT cut admin.telastyle.app DNS — that happens at end of 14c.
+
+Now: read PORT.md + docs/phase-14-admin-parity.md (full spec) + the
+8 legacy admin pages for visual reference (paths in the spec). Then
+start with the scaffold checklist.
+```
+
+---
+
+## 14b — session-start prompt
+
+Copy this into a fresh Claude Code session at `/Users/lukegorski/tela`
+AFTER 14a is shipped + smoke-tested:
+
+```
+You are building 5 new admin capabilities + 3 new admin pages.
+Phase 14b of the admin parity workstream.
+
+WORKING DIR: /Users/lukegorski/tela
+LEGACY DIR: /Users/lukegorski/ale (READ-ONLY)
+LEGACY ADMIN URL: https://admin.telastyle.app (visual reference)
+
+FULL SPEC: docs/phase-14-admin-parity.md (read cover to cover)
+
+══════════════════════════════════════════════════════════
+WHAT 14b SHIPS:
+══════════════════════════════════════════════════════════
+
+5 NEW ADMIN CAPABILITIES (all requiresAdmin: true):
+  admin.getActivity({ limit?, before? }) → { entries[], hasMore }
+  admin.getUserWardrobe({ userId }) → { items: RichItem[] }
+  admin.getUserOutfits({ userId }) → { outfits: RichOutfit[] }
+  admin.getUserChats({ userId, limit?, offset? }) → { messages, total }
+  admin.getUserCosts({ userId }) → { totalCostCents, byOperation, entries }
+
+3 NEW ADMIN PAGES:
+  /admin/activity — port from legacy 147-line page
+  /admin/chat — port from legacy 13-line page (just AdminUserList wrapper)
+  /admin/users/[id] — port from legacy 485-line page (4 tabs)
+
+P5 ACTIVITY EVENT MAPPING:
+  Build formatActivityEvent helper that maps our event types to the
+  same English labels legacy uses. See P5 mapping table in the spec.
+  If outfit.unsaved or auth.onboarding_completed don't exist in our
+  event taxonomy, add them (small extension to packages/events/src/types.ts).
+
+NOT in 14b (deferred to 14c):
+  AdminAiChat (slide-out panel + /admin/ai)
+  Anthropic provider extension
+  is_admin_chat schema migration
+  DNS cut
+
+══════════════════════════════════════════════════════════
+EXECUTION RULES:
+══════════════════════════════════════════════════════════
+
+- All 5 new capabilities go in packages/capabilities/src/admin/
+  with requiresAdmin: true. Reuse fetchRichItems / fetchRichOutfits
+  from wardrobe/itemShape.ts + outfit/outfitShape.ts (with userId
+  param). The capability registry's requiresAdmin gate enforces
+  authorization; defense-in-depth is fine.
+- For admin.getActivity, query the events table directly (cursor
+  pagination via `before` ISO string). Order desc by created_at.
+- For admin.getUserChats, query chat_messages JOIN chat_conversations
+  ON conversation_id WHERE user_id = $userId. Filter is_admin_chat = false
+  (admin shouldn't see admin chats here — those go in 14c's admin
+  chat list).
+- For admin.getUserCosts, query generations table WHERE user_id = $userId,
+  aggregate by operation, return total + breakdown + raw entries.
+- /admin/users/[id] tabs:
+    Wardrobe → admin.getUserWardrobe (renders item grid)
+    Outfits → admin.getUserOutfits (renders outfit list with try-on
+              status)
+    Chat → admin.getUserChats (renders message bubbles + tool call
+           summaries)
+    Costs → admin.getUserCosts (renders summary card + breakdown
+            table + usage log)
+  Tab routing via ?tab= query param. Default 'wardrobe'.
+- /admin/activity uses cursor pagination (`before=<iso>`). Load-more
+  button at the bottom.
+- /admin/chat is a 13-line wrapper around the AdminUserList from 14a;
+  hrefBuilder = (userId) => `/admin/users/${userId}?tab=chat`.
+- Pitfall #11/#12/#13/#14 still apply.
+- Before commit: pnpm verify.
+- Single commit (or split if natural break) → ASK before pushing.
+- After push: WAIT for Luke to smoke-test on the Railway admin URL.
+
+DNS does NOT cut yet.
+
+Now: read PORT.md + the spec + the 3 legacy admin pages
+(activity, chat, users/[uid]) + verify the event taxonomy gaps.
+Then build capabilities first, pages second.
+```
+
+---
+
+## 14c — session-start prompt
+
+Copy this into a fresh Claude Code session at `/Users/lukegorski/tela`
+AFTER 14b is shipped + smoke-tested:
+
+```
+You are building AdminAiChat (slide-out panel + /admin/ai page +
+persistence + Anthropic backend + admin tool catalog) and cutting
+DNS to admin.telastyle.app. Phase 14c of the admin parity workstream.
+
+WORKING DIR: /Users/lukegorski/tela
+LEGACY DIR: /Users/lukegorski/ale (READ-ONLY)
+LEGACY ADMIN URL: https://admin.telastyle.app (visual reference)
+
+FULL SPEC: docs/phase-14-admin-parity.md (read cover to cover)
+
+══════════════════════════════════════════════════════════
+WHAT 14c SHIPS:
+══════════════════════════════════════════════════════════
+
+SCHEMA MIGRATION 0014:
+  ALTER TABLE chat_conversations ADD COLUMN is_admin_chat BOOLEAN NOT NULL DEFAULT FALSE;
+  CREATE INDEX chat_conversations_is_admin_chat_idx ON chat_conversations(is_admin_chat) WHERE is_admin_chat = TRUE;
+
+3 NEW ADMIN CAPABILITIES (all requiresAdmin: true):
+  admin.streamChatTurn (generator) — like streamChatTurn but uses
+    Anthropic, sets is_admin_chat=true, includes admin tools, passes
+    currentRoute to system prompt
+  admin.listAdminChats({ limit?, offset? }) — lists ALL admin chats
+    (any admin sees any) sorted last_message_at desc; includes
+    startedBy: { email, displayName }
+  admin.getAdminChat({ conversationId }) — like chat.getConversation
+    but reads any admin chat, includes startedBy
+
+@TELA/AI EXTENSIONS:
+  - Verify Anthropic provider's chatMultiStream is implemented.
+    If not, add it (mirrors OpenAI implementation).
+  - The provider selection is by model prefix (claude-* → Anthropic,
+    gpt-* → OpenAI). Or add explicit provider param.
+
+APPS/API SSE ENDPOINT:
+  POST /admin/chat/stream → calls admin.streamChatTurn, gates on
+  whoami.isAdmin === true. SSE event format mirrors /chat/stream.
+
+APPS/ADMIN SURFACES:
+  - <AdminAiPanel> slide-out (port from legacy AdminShell.tsx
+    lines 208-237). 420px desktop right side, persists open/closed
+    in localStorage["adminAiPanelOpen"], defaults open.
+  - /admin/ai page renders <AdminAiChat variant="page" />.
+  - <AdminAiChat> component (port from legacy AdminAiChat.tsx,
+    444 lines). variant="panel" | "page". Conversation list sidebar
+    (lists ALL admin chats per P6), main pane is current conversation
+    with streaming.
+  - ClaudeIcon SVG (orange #d97757) in AdminNav top-right toggles
+    the panel. Port verbatim from legacy AdminShell lines 25-30.
+
+CAPABILITY REGISTRY:
+  Add `buildToolCatalog({ includeAdmin: true })` variant. Default
+  filter (used by user /chat) excludes requiresAdmin. Admin variant
+  includes them. Two callers (chat user vs admin) get different
+  tool catalogs.
+
+DNS CUT (last step):
+  After all the above ships and smoke-tests pass, Luke cuts DNS:
+  admin.telastyle.app CNAME → Railway admin service.
+
+══════════════════════════════════════════════════════════
+EXECUTION RULES:
+══════════════════════════════════════════════════════════
+
+- Schema 0014: edit packages/db/src/schema/stubs.ts (chat tables
+  live there) → db:generate → INSPECT SQL → db:migrate → rebuild.
+- admin.streamChatTurn lives in packages/capabilities/src/admin/
+  (separate file, not user chat dir). It's structurally similar to
+  streamChatTurn but enough differs (Anthropic, admin tools,
+  currentRoute, is_admin_chat flag) that copying + modifying is
+  cleaner than parameterizing.
+- Anthropic provider: use claude-sonnet-4 (matches legacy MODEL).
+  Same multi-turn / tool dispatch / max depth 5.
+- currentRoute: client passes the admin's current pathname
+  (e.g., '/admin/users/abc') in the SSE request body. Server passes
+  it to system prompt builder.
+- is_admin_chat is set on conversation INSERT, never updated. New
+  admin chats get true; new user chats get false (default).
+- Conversation list (sidebar) shows team-shared admin chats. Each
+  row shows: title (auto from first user message), startedBy avatar
+  + name, last_message_at timeAgo. Click → load that conversation
+  in main pane.
+- Pitfall #11/#12/#13/#14 still apply.
+- Before commit: pnpm verify (full chain — schema build, capabilities
+  build, web typecheck, admin typecheck, no-residue scan).
+- One coherent commit per phase (could split: 14c-schema +
+  14c-frontend) → ASK before pushing.
+- After push: WAIT for Luke to smoke-test on Railway URL. THEN
+  manually cut DNS.
+
+══════════════════════════════════════════════════════════
+DNS CUT PROCEDURE (Luke does this manually after smoke):
+══════════════════════════════════════════════════════════
+
+1. Verify all admin pages render correctly on Railway URL
+2. Verify AdminAiChat: panel opens, message streams, tool calls
+   work, conversation persists, sidebar shows team chats
+3. Update DNS: admin.telastyle.app CNAME → Railway admin service
+   hostname
+4. Wait for DNS propagation (5 min - 24 hours)
+5. Verify admin.telastyle.app serves the new admin
+6. Keep legacy admin alive on Vercel for 1 week as fallback
+7. After 1 week: tear down legacy admin
+
+POST-CUT FOLLOW-UP (separate small commits):
+- Update PORT.md status table to mark Phase 14 complete
+- Add reference commits 14a/14b/14c
+- Update memory file with Phase 14 completion + the "admin lives at
+  apps/admin separate service" architectural pattern
+- Consider removing isAdmin from auth.whoami's apps/web consumers
+  (apps/web doesn't need to know — only apps/admin does)
+
+Now: read PORT.md + the spec + legacy AdminAiChat.tsx (444 lines)
++ legacy /api/admin/ai/chat/route.ts (354 lines, the persistence
++ tool dispatch reference). Then build the schema + capabilities
+first, frontend second.
+```

@@ -100,3 +100,38 @@ export interface LegacyOutfit {
   /** Legacy try-on model selection: 'self' | 'model-woman' | 'model-man' (untyped string in legacy). */
   model?: string;
 }
+
+// ─── Chat (Phase 11 D4 / M5) ───
+
+export type LegacyChatAttachment =
+  | {
+      type: 'image';
+      url: string;
+      imagePath?: string;
+      /** Set after the legacy app analyzed an image-attachment and added it to wardrobe. */
+      itemId?: string;
+    }
+  | {
+      type: 'wardrobe_item';
+      url: string;
+      itemId: string;
+    };
+
+export interface LegacyChatToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  result?: Record<string, unknown>;
+}
+
+export interface LegacyChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  toolCalls?: LegacyChatToolCall[];
+  attachments?: LegacyChatAttachment[];
+  // richCards intentionally omitted — not migrated; tool_calls.result drives
+  // rich-card rendering in the new app.
+  /** Firestore Timestamp. */
+  createdAt: { toDate(): Date } | Date;
+}

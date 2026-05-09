@@ -27,6 +27,15 @@ const toolInvocation = z.object({
 const attachment = z.discriminatedUnion('type', [
   z.object({ type: z.literal('image'), photoId: z.string().uuid() }),
   z.object({ type: z.literal('wardrobe_item'), itemId: z.string().uuid() }),
+  // image-legacy is migration-only — preserves the legacy Firebase
+  // Storage URL on imported messages. See ChatAttachment in @tela/db
+  // (Phase 11 D4 / M5). Will be rewritten to the canonical 'image'
+  // shape by the deferred URL-conversion workstream.
+  z.object({
+    type: z.literal('image-legacy'),
+    url: z.string().url(),
+    sourceBucket: z.string().optional(),
+  }),
 ]);
 
 const messageSchema = z.object({

@@ -24,6 +24,15 @@ export interface MigrateOptions {
    * wardrobe will fail.
    */
   includeOutfits?: boolean;
+  /**
+   * Include chat history migration (Phase 11 D4 / M5): one
+   * chat_conversations + N chat_messages per user. Independent of
+   * wardrobe / outfits / images — chat references resolve through
+   * separate paths (wardrobe_item attachments via migration_log;
+   * image attachments preserved as image-legacy shape pointing at
+   * legacy Firebase Storage URLs).
+   */
+  includeChat?: boolean;
 }
 
 export interface MigrateResult {
@@ -53,6 +62,20 @@ export interface MigrateResult {
     migrated: number;
     skipped: Array<{ legacyOutfitId: string; reason: string }>;
     imagesFailed: Array<{ legacyOutfitId: string; reason: string }>;
+  };
+  /**
+   * Chat migration stats (Phase 11 D4 / M5). One conversation per user
+   * plus N messages. Image attachments preserved as image-legacy URLs
+   * pointing at legacy Firebase Storage (deferred URL conversion).
+   */
+  chat: {
+    conversationCreated: boolean;
+    messagesMigrated: number;
+    messagesSkipped: Array<{ legacyId: string; reason: string }>;
+    /** Number of attachments preserved as image-legacy (legacy Firebase URL). */
+    legacyAttachmentsPreserved: number;
+    /** wardrobe_item attachments where the underlying item also migrated. */
+    wardrobeAttachmentsResolved: number;
   };
 }
 

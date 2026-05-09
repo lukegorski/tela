@@ -37,6 +37,10 @@ import {
   tryOnJobs,
   type TryOnStatus,
   type TryOnStep,
+  chatConversations,
+  chatMessages,
+  type ChatAttachment,
+  type ChatToolCall,
 } from '@tela/db';
 import {
   getSupabaseAdmin,
@@ -46,6 +50,8 @@ import {
 } from '../storage/supabase.js';
 import { getLegacyDb, getLegacyBucket } from './firebase.js';
 import type {
+  LegacyChatAttachment,
+  LegacyChatMessage,
   LegacyOutfit,
   LegacyUserProfile,
   LegacyWardrobeItem,
@@ -99,8 +105,9 @@ export async function migrateLegacyUser(
   const only = opts.only ?? 'all';
   const includeImages = opts.includeImages ?? false;
   const includeOutfits = opts.includeOutfits ?? false;
+  const includeChat = opts.includeChat ?? false;
 
-  log(`start — legacyUid=${legacyUid} newUserId=${newUserId} dryRun=${dryRun} only=${only} includeImages=${includeImages} includeOutfits=${includeOutfits}`);
+  log(`start — legacyUid=${legacyUid} newUserId=${newUserId} dryRun=${dryRun} only=${only} includeImages=${includeImages} includeOutfits=${includeOutfits} includeChat=${includeChat}`);
 
   const result: MigrateResult = {
     durationMs: 0,
@@ -121,6 +128,13 @@ export async function migrateLegacyUser(
       migrated: 0,
       skipped: [],
       imagesFailed: [],
+    },
+    chat: {
+      conversationCreated: false,
+      messagesMigrated: 0,
+      messagesSkipped: [],
+      legacyAttachmentsPreserved: 0,
+      wardrobeAttachmentsResolved: 0,
     },
   };
 
@@ -149,7 +163,19 @@ export async function migrateLegacyUser(
     result.tryOns = stats.tryOns;
   }
 
-  // ─── 4. Verification ───
+  // ─── 4. Chat (Phase 11 D4 / M5) ───
+  // Chat depends on the user existing but is otherwise independent of
+  // wardrobe / outfits / images. Wardrobe-item attachments are resolved
+  // through migration_log when present; image attachments are preserved
+  // as image-legacy URLs. Independent flag (includeChat) since the
+  // 'only' enum is constrained to profile|wardrobe|outfits|all and
+  // gating chat on `all` would force-couple it with images + outfits.
+  if (only === 'all' && includeChat) {
+    const stats = await migrateChat({ legacyUid, newUserId, dryRun });
+    result.chat = stats;
+  }
+
+  // ─── 5. Verification ───
   if (!dryRun && includeImages) {
     await verifyMigration({ newUserId });
   }
@@ -1228,7 +1254,260 @@ async function getOrCreateSyntheticGeneration(args: {
   return { id: result, created: true };
 }
 
-// ─── 4. Verification ───
+// ─── 4. Chat (Phase 11 D4 / M5) ───
+
+/**
+ * Migrate one user's legacy chat: ONE chat_conversations row per user
+ * + N chat_messages mapped 1:1 from the legacy Firestore collection
+ * `users/{uid}/chatMessages` (chronological order).
+ *
+ * Image attachments are preserved as `image-legacy` URLs pointing at
+ * the legacy Firebase Storage. Wardrobe-item attachments resolve via
+ * migration_log when the underlying item also migrated; otherwise they
+ * fall back to image-legacy with the legacy URL (graceful degrade).
+ *
+ * Idempotent: per-message lookup against migration_log; conversation
+ * keyed on `synthetic:chat:{legacyUid}`. Re-runs add only the messages
+ * that weren't migrated yet (none, in the cutover case).
+ */
+async function migrateChat(args: {
+  legacyUid: string;
+  newUserId: string;
+  dryRun: boolean;
+}): Promise<MigrateResult['chat']> {
+  const { legacyUid, newUserId, dryRun } = args;
+  const stats: MigrateResult['chat'] = {
+    conversationCreated: false,
+    messagesMigrated: 0,
+    messagesSkipped: [],
+    legacyAttachmentsPreserved: 0,
+    wardrobeAttachmentsResolved: 0,
+  };
+
+  log(`chat: reading legacy messages for ${legacyUid}`);
+  const legacyDb = getLegacyDb();
+  const messagesSnap = await legacyDb
+    .collection('users')
+    .doc(legacyUid)
+    .collection('chatMessages')
+    .orderBy('createdAt', 'asc')
+    .get();
+
+  const messages: LegacyChatMessage[] = messagesSnap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as Omit<LegacyChatMessage, 'id'>),
+  }));
+  log(`chat: ${messages.length} legacy messages found`);
+
+  if (messages.length === 0) return stats;
+
+  // Get-or-create the conversation. Idempotency key: synthetic:chat:{legacyUid}.
+  const db = getDb();
+  const conversationLegacyKey = `synthetic:chat:${legacyUid}`;
+  let conversationId: string;
+
+  if (dryRun) {
+    conversationId = '00000000-0000-0000-0000-000000000000';
+    stats.conversationCreated = true; // would create
+  } else {
+    const existingConvo = await db.query.migrationLog.findFirst({
+      where: and(
+        eq(migrationLog.userId, newUserId),
+        eq(migrationLog.legacyEntityType, 'chat_conversation'),
+        eq(migrationLog.legacyId, conversationLegacyKey),
+      ),
+    });
+    if (existingConvo) {
+      conversationId = existingConvo.newId;
+      log(`chat: reusing existing conversation ${conversationId}`);
+    } else {
+      const result = await db.transaction(async (tx) => {
+        const [convoRow] = await tx
+          .insert(chatConversations)
+          .values({
+            userId: newUserId,
+            title: '(imported from legacy)',
+            messageCount: 0,
+            lastMessageAt: null,
+          })
+          .returning({ id: chatConversations.id });
+        await tx.insert(migrationLog).values({
+          userId: newUserId,
+          legacyEntityType: 'chat_conversation',
+          legacyId: conversationLegacyKey,
+          newEntityType: 'chat_conversation',
+          newId: convoRow.id,
+        });
+        return convoRow.id;
+      });
+      conversationId = result;
+      stats.conversationCreated = true;
+      log(`chat: created conversation ${conversationId}`);
+    }
+  }
+
+  // Per-message migration. Sequential (low volume per user, no point
+  // parallelising). Skip already-migrated rows via migration_log.
+  let processed = 0;
+  for (const msg of messages) {
+    processed += 1;
+
+    if (msg.role !== 'user' && msg.role !== 'assistant') {
+      stats.messagesSkipped.push({ legacyId: msg.id, reason: `unsupported role: ${msg.role}` });
+      continue;
+    }
+
+    if (!dryRun) {
+      const existingMsg = await db.query.migrationLog.findFirst({
+        where: and(
+          eq(migrationLog.userId, newUserId),
+          eq(migrationLog.legacyEntityType, 'chat_message'),
+          eq(migrationLog.legacyId, msg.id),
+        ),
+      });
+      if (existingMsg) {
+        log(`chat msg ${processed}/${messages.length}: ${msg.id} — already migrated, skipping`);
+        continue;
+      }
+    }
+
+    // Resolve attachments.
+    const resolved = await resolveChatAttachments({
+      attachments: msg.attachments ?? [],
+      newUserId,
+      dryRun,
+    });
+    stats.legacyAttachmentsPreserved += resolved.legacyCount;
+    stats.wardrobeAttachmentsResolved += resolved.wardrobeCount;
+
+    // Map tool calls (legacy → new shape).
+    const toolCalls = mapLegacyToolCalls(msg.toolCalls);
+
+    if (dryRun) continue;
+
+    const createdAt = toDate(msg.createdAt);
+
+    await db.transaction(async (tx) => {
+      const [msgRow] = await tx
+        .insert(chatMessages)
+        .values({
+          conversationId,
+          role: msg.role,
+          content: msg.content,
+          toolCalls,
+          attachments: resolved.attachments.length > 0 ? resolved.attachments : null,
+          createdAt,
+        })
+        .returning({ id: chatMessages.id });
+      await tx.insert(migrationLog).values({
+        userId: newUserId,
+        legacyEntityType: 'chat_message',
+        legacyId: msg.id,
+        newEntityType: 'chat_message',
+        newId: msgRow.id,
+      });
+    });
+    stats.messagesMigrated += 1;
+    log(`chat msg ${processed}/${messages.length}: ${msg.id} — migrated`);
+  }
+
+  // Reconcile denormalized counters on chat_conversations after the bulk
+  // insert (the streamChatTurn capability mutates these incrementally;
+  // we bypass it for migration so the values would otherwise be 0).
+  if (!dryRun) {
+    await db
+      .update(chatConversations)
+      .set({
+        messageCount: sql`(SELECT count(*)::int FROM ${chatMessages} WHERE ${chatMessages.conversationId} = ${chatConversations.id})`,
+        lastMessageAt: sql`(SELECT max(${chatMessages.createdAt}) FROM ${chatMessages} WHERE ${chatMessages.conversationId} = ${chatConversations.id})`,
+        updatedAt: new Date(),
+      })
+      .where(eq(chatConversations.id, conversationId));
+  }
+
+  return stats;
+}
+
+/**
+ * Map legacy chat attachments to the new schema:
+ *   - 'image' with itemId: try to resolve to wardrobe_item (new flow);
+ *     fall back to image-legacy with the legacy URL.
+ *   - 'image' without itemId: image-legacy.
+ *   - 'wardrobe_item': try to resolve itemId via migration_log; fall
+ *     back to image-legacy with the URL on miss.
+ *
+ * legacyCount + wardrobeCount stats let the CLI summary explain how
+ * many attachments are still pinned to legacy Firebase Storage.
+ */
+async function resolveChatAttachments(args: {
+  attachments: LegacyChatAttachment[];
+  newUserId: string;
+  dryRun: boolean;
+}): Promise<{ attachments: ChatAttachment[]; legacyCount: number; wardrobeCount: number }> {
+  const { attachments, newUserId, dryRun } = args;
+  const out: ChatAttachment[] = [];
+  let legacyCount = 0;
+  let wardrobeCount = 0;
+  if (attachments.length === 0) {
+    return { attachments: out, legacyCount, wardrobeCount };
+  }
+  const db = getDb();
+  const sourceBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+
+  for (const att of attachments) {
+    let resolvedItemId: string | null = null;
+    const candidateLegacyItemId = att.type === 'wardrobe_item' ? att.itemId : att.itemId;
+    if (candidateLegacyItemId && !dryRun) {
+      const logRow = await db.query.migrationLog.findFirst({
+        where: and(
+          eq(migrationLog.userId, newUserId),
+          eq(migrationLog.legacyEntityType, 'wardrobe_item'),
+          eq(migrationLog.legacyId, candidateLegacyItemId),
+        ),
+      });
+      if (logRow) resolvedItemId = logRow.newId;
+    }
+
+    if (resolvedItemId) {
+      out.push({ type: 'wardrobe_item', itemId: resolvedItemId });
+      wardrobeCount += 1;
+    } else {
+      out.push({
+        type: 'image-legacy',
+        url: att.url,
+        ...(sourceBucket ? { sourceBucket } : {}),
+      });
+      legacyCount += 1;
+    }
+  }
+  return { attachments: out, legacyCount, wardrobeCount };
+}
+
+/**
+ * Map legacy ChatToolCall[] → new ChatToolCall[]. Field renames:
+ *   - arguments → args
+ *   - id is dropped (new schema doesn't track it; tool calls are
+ *     anonymous within a turn)
+ *   - ok / error synthesized: legacy didn't track success state, but
+ *     the presence of `result` implies the call succeeded.
+ *
+ * Returns null when there are no tool calls — chat_messages.tool_calls
+ * is nullable jsonb.
+ */
+function mapLegacyToolCalls(
+  legacyCalls: LegacyChatMessage['toolCalls'],
+): ChatToolCall[] | null {
+  if (!legacyCalls || legacyCalls.length === 0) return null;
+  return legacyCalls.map((c) => ({
+    name: c.name,
+    args: c.arguments,
+    ok: c.result !== undefined,
+    error: null,
+    result: c.result,
+  }));
+}
+
+// ─── 5. Verification ───
 
 async function verifyMigration(args: { newUserId: string }): Promise<void> {
   const { newUserId } = args;

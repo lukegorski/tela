@@ -56,10 +56,19 @@ export interface ChatToolCall {
  * One attachment on a user-role chat message. The client passes only the
  * row id (photoId / itemId); the server resolves to actual URLs at use
  * time, so URLs aren't persisted and can't be forged.
+ *
+ * `image-legacy` is the migration-only variant: it preserves the legacy
+ * Firebase Storage URL on imported chat messages. Renderers display it
+ * as `<img src>` directly. Per Phase 11 D4 / M5, legacy Firebase Storage
+ * MUST stay alive until a follow-up workstream converts these URLs to
+ * Supabase Storage paths and rewrites the attachments to the canonical
+ * `{ type: 'image', photoId }` shape. New (non-migrated) chat traffic
+ * never produces this variant.
  */
 export type ChatAttachment =
   | { type: 'image'; photoId: string }
-  | { type: 'wardrobe_item'; itemId: string };
+  | { type: 'wardrobe_item'; itemId: string }
+  | { type: 'image-legacy'; url: string; sourceBucket?: string };
 
 export const chatMessages = pgTable(
   'chat_messages',

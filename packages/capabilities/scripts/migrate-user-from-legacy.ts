@@ -67,6 +67,7 @@ interface CliArgs {
   onlySection: 'profile' | 'wardrobe' | 'outfits' | 'all';
   includeImages: boolean;
   includeOutfits: boolean;
+  includeChat: boolean;
   yes: boolean;
 }
 
@@ -80,6 +81,7 @@ function parseArgs(argv: string[]): CliArgs {
     onlySection: 'all',
     includeImages: false,
     includeOutfits: false,
+    includeChat: false,
     yes: false,
   };
 
@@ -143,6 +145,9 @@ function parseArgs(argv: string[]): CliArgs {
       case '--include-outfits':
         args.includeOutfits = true;
         break;
+      case '--include-chat':
+        args.includeChat = true;
+        break;
       case '--yes':
       case '-y':
         args.yes = true;
@@ -182,6 +187,7 @@ Per-user migration flags (apply to --legacy-email / --legacy-uid / --all):
   --only <section>             profile|wardrobe|outfits|all (default: all).
   --include-images             Transfer images Firebase → Supabase.
   --include-outfits            Migrate outfits + synthetic ctx + gen.
+  --include-chat               Migrate chat history (M5).
   -y, --yes                    Skip M11 interactive confirmation.
   -h, --help                   Show this help.
 
@@ -204,7 +210,7 @@ Examples:
         --include-images --include-outfits
 
   # Real run for all users (after pre-create + verification)
-  ... --all --include-images --include-outfits --yes
+  ... --all --include-images --include-outfits --include-chat --yes
 
 Run procedure: see docs/phase-11-multi-user-migration.md (M10).
 `);
@@ -321,7 +327,7 @@ async function runAll(args: CliArgs): Promise<void> {
     `\nMigrating ${filtered.length} of ${all.length} legacy users` +
       (args.skip.length ? ` (skipping ${args.skip.length})` : '') +
       (args.only.length ? ` (only ${args.only.length})` : '') +
-      `, dryRun=${args.dryRun}, includeImages=${args.includeImages}, includeOutfits=${args.includeOutfits}` +
+      `, dryRun=${args.dryRun}, includeImages=${args.includeImages}, includeOutfits=${args.includeOutfits}, includeChat=${args.includeChat}` +
       '\n',
   );
 
@@ -346,6 +352,7 @@ async function runAll(args: CliArgs): Promise<void> {
     only: args.onlySection,
     includeImages: args.includeImages,
     includeOutfits: args.includeOutfits,
+    includeChat: args.includeChat,
   };
 
   const totals = {
@@ -388,7 +395,8 @@ async function runAll(args: CliArgs): Promise<void> {
         `  ✓ ${u.email}: profile=${r.profile.fieldsUpdated.length} fields, ` +
           `wardrobe=${r.wardrobe.migrated} migrated/${r.wardrobe.skipped.length} skipped, ` +
           `outfits=${r.outfits.migrated} migrated/${r.outfits.skipped.length} skipped, ` +
-          `tryOns=${r.tryOns.migrated} migrated/${r.tryOns.skipped.length} skipped`,
+          `tryOns=${r.tryOns.migrated} migrated/${r.tryOns.skipped.length} skipped, ` +
+          `chat=${r.chat.messagesMigrated} msgs/${r.chat.messagesSkipped.length} skipped`,
       );
     }
   }
@@ -457,6 +465,7 @@ About to migrate (only=${args.onlySection}, includeImages=${args.includeImages},
     only: args.onlySection,
     includeImages: args.includeImages,
     includeOutfits: args.includeOutfits,
+    includeChat: args.includeChat,
   };
 
   let result: MigrateResult;
@@ -525,6 +534,20 @@ function printSingleSummary(result: MigrateResult, args: CliArgs): void {
       }
       if (result.tryOns.skipped.length > 10) {
         lines.push(`    (and ${result.tryOns.skipped.length - 10} more — see migration_failures table)`);
+      }
+    }
+  }
+  if (args.includeChat) {
+    lines.push(
+      `✓ ${args.dryRun ? 'WOULD migrate' : 'Migrated'} ${result.chat.messagesMigrated} chat messages ` +
+        `(conversation ${result.chat.conversationCreated ? 'created' : 'reused'}, ` +
+        `${result.chat.legacyAttachmentsPreserved} legacy URLs preserved, ` +
+        `${result.chat.wardrobeAttachmentsResolved} wardrobe refs resolved, ` +
+        `${result.chat.messagesSkipped.length} skipped)`,
+    );
+    if (result.chat.messagesSkipped.length > 0) {
+      for (const s of result.chat.messagesSkipped.slice(0, 5)) {
+        lines.push(`    - ${s.legacyId}: ${s.reason}`);
       }
     }
   }

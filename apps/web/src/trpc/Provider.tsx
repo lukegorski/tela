@@ -42,9 +42,11 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
             // seen this in dev — multi-client races, stale Web Locks, etc.),
             // we'd otherwise block every tRPC call indefinitely and freeze
             // every consumer hook (useOutfits.loading stuck on true, etc.).
-            // Time out after 1500ms and send the request without an auth
-            // header — the server will return 401, the client can surface
-            // the error, and we don't deadlock the UI.
+            // 10s is generous enough that the @supabase/ssr browser client's
+            // first cookie read can complete on cold page load (where 3s was
+            // tripping the timeout, sending requests without auth headers,
+            // and getting 401s back), but still bounded so a genuinely
+            // hung session doesn't deadlock the UI forever.
             const supabase = getSupabaseBrowserClient();
             try {
               const session = await Promise.race([
@@ -53,10 +55,10 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
                   setTimeout(() => {
                     // eslint-disable-next-line no-console
                     console.warn(
-                      '[trpc] supabase.auth.getSession() did not resolve within 3s — sending request without auth token',
+                      '[trpc] supabase.auth.getSession() did not resolve within 10s — sending request without auth token',
                     );
                     resolve(null);
-                  }, 3000),
+                  }, 10000),
                 ),
               ]);
               const token = session?.access_token;

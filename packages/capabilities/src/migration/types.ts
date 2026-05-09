@@ -43,6 +43,17 @@ export interface MigrateResult {
     syntheticContextsCreated: number;
     syntheticGenerationsCreated: number;
   };
+  /**
+   * Try-on migration stats (Phase 11 D3 / M4). Only completed legacy
+   * try-ons migrate; in-flight / failed / never-tried get counted in
+   * `skipped`. The outfit still migrates without try-on data attached;
+   * users re-trigger via the new app.
+   */
+  tryOns: {
+    migrated: number;
+    skipped: Array<{ legacyOutfitId: string; reason: string }>;
+    imagesFailed: Array<{ legacyOutfitId: string; reason: string }>;
+  };
 }
 
 /**

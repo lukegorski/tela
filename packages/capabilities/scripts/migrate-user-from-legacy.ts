@@ -387,7 +387,8 @@ async function runAll(args: CliArgs): Promise<void> {
       console.log(
         `  ✓ ${u.email}: profile=${r.profile.fieldsUpdated.length} fields, ` +
           `wardrobe=${r.wardrobe.migrated} migrated/${r.wardrobe.skipped.length} skipped, ` +
-          `outfits=${r.outfits.migrated} migrated/${r.outfits.skipped.length} skipped`,
+          `outfits=${r.outfits.migrated} migrated/${r.outfits.skipped.length} skipped, ` +
+          `tryOns=${r.tryOns.migrated} migrated/${r.tryOns.skipped.length} skipped`,
       );
     }
   }
@@ -510,6 +511,20 @@ function printSingleSummary(result: MigrateResult, args: CliArgs): void {
     if (result.outfits.skipped.length > 0) {
       for (const s of result.outfits.skipped.slice(0, 10)) {
         lines.push(`    - ${s.legacyId}: ${s.reason}`);
+      }
+    }
+    // Try-on stats (M4) — same gate as outfits since try-ons attach to outfits.
+    lines.push(
+      `✓ ${args.dryRun ? 'WOULD migrate' : 'Migrated'} ${result.tryOns.migrated} try-ons ` +
+        `(${result.tryOns.skipped.length} skipped, ` +
+        `${result.tryOns.imagesFailed.length} image-transfer failures)`,
+    );
+    if (result.tryOns.skipped.length > 0) {
+      for (const s of result.tryOns.skipped.slice(0, 10)) {
+        lines.push(`    - ${s.legacyOutfitId}: ${s.reason}`);
+      }
+      if (result.tryOns.skipped.length > 10) {
+        lines.push(`    (and ${result.tryOns.skipped.length - 10} more — see migration_failures table)`);
       }
     }
   }

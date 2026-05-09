@@ -91,4 +91,12 @@ export interface LegacyOutfit {
   /** Firestore Timestamps. */
   createdAt: { toDate(): Date } | Date;
   savedAt?: { toDate(): Date } | Date | null;
+  // ─── Try-on fields (Phase 11 D3 / M4) ───
+  tryOnImageURL?: string;
+  tryOnStatus?: 'pending' | 'generating' | 'completed' | 'failed';
+  tryOnStartedAt?: { toDate(): Date } | Date | null;
+  tryOnAsyncJobId?: string | null;
+  tryOnAsyncStep?: string | null;
+  /** Legacy try-on model selection: 'self' | 'model-woman' | 'model-man' (untyped string in legacy). */
+  model?: string;
 }

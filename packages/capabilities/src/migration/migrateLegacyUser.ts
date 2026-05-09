@@ -34,10 +34,15 @@ import {
   wardrobeGaps,
   migrationLog,
   migrationFailures,
+  tryOnJobs,
+  type TryOnStatus,
+  type TryOnStep,
 } from '@tela/db';
 import {
   getSupabaseAdmin,
   ITEM_PHOTOS_BUCKET,
+  TRY_ON_BUCKET,
+  resolveModelImageUrl,
 } from '../storage/supabase.js';
 import { getLegacyDb, getLegacyBucket } from './firebase.js';
 import type {
@@ -112,6 +117,11 @@ export async function migrateLegacyUser(
       syntheticContextsCreated: 0,
       syntheticGenerationsCreated: 0,
     },
+    tryOns: {
+      migrated: 0,
+      skipped: [],
+      imagesFailed: [],
+    },
   };
 
   // ─── 1. Profile ───
@@ -128,12 +138,15 @@ export async function migrateLegacyUser(
     result.wardrobe = wardrobeStats;
   }
 
-  // ─── 3. Outfits ───
+  // ─── 3. Outfits + try-ons ───
   // Outfits depend on items already being migrated (via migration_log
-  // lookups). D.13b enables this together with images.
+  // lookups). D.13b enables this together with images. Try-on migration
+  // (Phase 11 D3 / M4) runs as part of this phase since try_on_jobs FK
+  // references the migrated outfit.
   if ((only === 'all' || only === 'outfits') && includeOutfits) {
-    const outfitStats = await migrateOutfits({ legacyUid, newUserId, dryRun });
-    result.outfits = outfitStats;
+    const stats = await migrateOutfits({ legacyUid, newUserId, dryRun });
+    result.outfits = stats.outfits;
+    result.tryOns = stats.tryOns;
   }
 
   // ─── 4. Verification ───
@@ -649,13 +662,18 @@ async function migrateOutfits(args: {
   legacyUid: string;
   newUserId: string;
   dryRun: boolean;
-}): Promise<MigrateResult['outfits']> {
+}): Promise<{ outfits: MigrateResult['outfits']; tryOns: MigrateResult['tryOns'] }> {
   const { legacyUid, newUserId, dryRun } = args;
   const stats: MigrateResult['outfits'] = {
     migrated: 0,
     skipped: [],
     syntheticContextsCreated: 0,
     syntheticGenerationsCreated: 0,
+  };
+  const tryOnStats: MigrateResult['tryOns'] = {
+    migrated: 0,
+    skipped: [],
+    imagesFailed: [],
   };
 
   log(`outfits: reading legacy outfits for ${legacyUid}`);
@@ -672,7 +690,13 @@ async function migrateOutfits(args: {
   }));
   log(`outfits: ${legacyOutfits.length} legacy outfits found`);
 
-  if (legacyOutfits.length === 0) return stats;
+  if (legacyOutfits.length === 0) return { outfits: stats, tryOns: tryOnStats };
+
+  // Try-on migration target bucket — provision once before any per-outfit
+  // try-on transfer attempts. Skipped in dry-run.
+  if (!dryRun && legacyOutfits.some((o) => o.tryOnStatus === 'completed')) {
+    await ensureTryOnBucket();
+  }
 
   // Dry-run preview map: legacyItemId → category. In real-run, items have
   // already been INSERTed into migration_log by the wardrobe phase, so the
@@ -731,6 +755,22 @@ async function migrateOutfits(args: {
         continue;
       }
       stats.migrated += 1;
+      if (outcome.tryOn) {
+        if (outcome.tryOn.migrated) {
+          tryOnStats.migrated += 1;
+        } else if (outcome.tryOn.skipped) {
+          tryOnStats.skipped.push({
+            legacyOutfitId: outfit.id,
+            reason: outcome.tryOn.reason ?? 'unknown',
+          });
+          if (outcome.tryOn.imageFailed) {
+            tryOnStats.imagesFailed.push({
+              legacyOutfitId: outfit.id,
+              reason: outcome.tryOn.reason ?? 'unknown',
+            });
+          }
+        }
+      }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       warn(`outfit ${processed}/${legacyOutfits.length} ${outfit.id} — failed: ${reason}`);
@@ -745,12 +785,29 @@ async function migrateOutfits(args: {
       }
     }
   }
-  return stats;
+  return { outfits: stats, tryOns: tryOnStats };
 }
 
 interface OutfitOutcome {
   skipped: boolean;
   reason?: string;
+  /**
+   * Try-on result for this outfit, if outfit migration succeeded and we
+   * attempted try-on migration. Undefined if the outfit was skipped or
+   * had no tryOnStatus to consider.
+   */
+  tryOn?: TryOnOutcome;
+}
+
+interface TryOnOutcome {
+  /** True if we wrote a try_on_jobs row (or would have, in dry-run). */
+  migrated: boolean;
+  /** True if we deliberately did not migrate (e.g., not completed). */
+  skipped: boolean;
+  /** Reason for skipping or failing. */
+  reason?: string;
+  /** True if the image transfer step failed specifically. */
+  imageFailed?: boolean;
 }
 
 async function migrateOneOutfit(args: {
@@ -772,6 +829,7 @@ async function migrateOneOutfit(args: {
 }): Promise<OutfitOutcome> {
   const {
     outfit,
+    legacyUid,
     newUserId,
     contextCache,
     legacyItemCategories,
@@ -890,6 +948,7 @@ async function migrateOneOutfit(args: {
   const captureContextId = contextId;
   const captureGenerationId = generation.id;
 
+  let newOutfitId: string | null = null;
   await db.transaction(async (tx) => {
     const [outfitRow] = await tx
       .insert(outfits)
@@ -928,10 +987,150 @@ async function migrateOneOutfit(args: {
       newEntityType: 'outfit',
       newId: outfitRow.id,
     });
+    newOutfitId = outfitRow.id;
   });
 
   log(`outfit ${idx}/${total}: ${outfit.id} — done`);
-  return { skipped: false };
+
+  // Try-on migration (M4) — runs AFTER outfit txn commits since the
+  // try_on_jobs.outfit_id FK references the just-inserted outfit row.
+  // newOutfitId is null only if the txn callback exited without setting
+  // it, which can't happen above — but TS doesn't know that.
+  if (!newOutfitId) {
+    return { skipped: false };
+  }
+  const tryOn = await migrateOneTryOn({
+    outfit,
+    newOutfitId,
+    legacyUid,
+    newUserId,
+    dryRun,
+    idx,
+    total,
+  });
+  return { skipped: false, tryOn };
+}
+
+const VALID_TRY_ON_MODELS = new Set(['self', 'model-woman', 'model-man']);
+const VALID_TRY_ON_STEPS: ReadonlyArray<TryOnStep> = ['bottoms', 'top', 'outerwear', 'dress'];
+
+/**
+ * Migrate one outfit's completed try-on to a try_on_jobs row + image
+ * mirror in the try-on-results bucket. Per M4:
+ *
+ *   tryOnStatus='completed' → migrate (status='complete')
+ *   tryOnStatus='pending' | 'generating' | 'failed' | undefined → skip
+ *
+ * Image transfer failures are RECOVERABLE — the outfit row stays in
+ * place; only the try-on attachment is missing. The user can re-trigger
+ * try-on from the new app's outfit detail screen, which produces a fresh
+ * try_on_jobs row through the existing tryon.generate capability.
+ */
+async function migrateOneTryOn(args: {
+  outfit: LegacyOutfit;
+  newOutfitId: string;
+  legacyUid: string;
+  newUserId: string;
+  dryRun: boolean;
+  idx: number;
+  total: number;
+}): Promise<TryOnOutcome> {
+  const { outfit, newOutfitId, legacyUid, newUserId, dryRun, idx, total } = args;
+
+  if (outfit.tryOnStatus !== 'completed') {
+    return {
+      migrated: false,
+      skipped: true,
+      reason: `tryOnStatus=${outfit.tryOnStatus ?? 'never tried'}`,
+    };
+  }
+
+  if (dryRun) {
+    log(`try-on ${idx}/${total}: ${outfit.id} — dry-run preview only`);
+    return { migrated: true, skipped: false };
+  }
+
+  // Idempotency: skip if already migrated.
+  const db = getDb();
+  const existing = await db.query.migrationLog.findFirst({
+    where: and(
+      eq(migrationLog.userId, newUserId),
+      eq(migrationLog.legacyEntityType, 'try_on_job'),
+      eq(migrationLog.legacyId, `${outfit.id}:tryon`),
+    ),
+  });
+  if (existing) {
+    log(`try-on ${idx}/${total}: ${outfit.id} — already migrated, skipping`);
+    return { migrated: true, skipped: false };
+  }
+
+  const newJobId = randomUuid();
+  const legacyPath = `users/${legacyUid}/outfits/${outfit.id}/try-on.jpg`;
+  const newPath = `${newUserId}/${newOutfitId}/${newJobId}.jpg`;
+
+  log(`try-on ${idx}/${total}: ${outfit.id} — transferring image`);
+  try {
+    await transferImage(legacyPath, newPath, TRY_ON_BUCKET);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    warn(`try-on ${idx}/${total}: ${outfit.id} — image transfer failed: ${reason}`);
+    await recordFailure({
+      userId: newUserId,
+      legacyEntityType: 'try_on_job',
+      legacyId: `${outfit.id}:tryon`,
+      reason: `image transfer failed: ${reason}`,
+    });
+    return {
+      migrated: false,
+      skipped: true,
+      reason: `image transfer: ${reason}`,
+      imageFailed: true,
+    };
+  }
+
+  // Resolve model image URL. Coerce legacy.model into our enum (legacy
+  // stores it as a free-form string). Default to 'model-woman' per M4.
+  const legacyModel = outfit.model ?? 'model-woman';
+  const modelKey = (VALID_TRY_ON_MODELS.has(legacyModel) ? legacyModel : 'model-woman') as
+    | 'self'
+    | 'model-woman'
+    | 'model-man';
+  const modelImageUrl = resolveModelImageUrl(modelKey);
+
+  // Validate async step (legacy stores as untyped string).
+  const asyncStep =
+    outfit.tryOnAsyncStep && (VALID_TRY_ON_STEPS as readonly string[]).includes(outfit.tryOnAsyncStep)
+      ? (outfit.tryOnAsyncStep as TryOnStep)
+      : null;
+
+  const startedAt = outfit.tryOnStartedAt ? toDate(outfit.tryOnStartedAt) : new Date();
+
+  await db.transaction(async (tx) => {
+    await tx.insert(tryOnJobs).values({
+      id: newJobId,
+      userId: newUserId,
+      outfitId: newOutfitId,
+      status: 'complete' satisfies TryOnStatus,
+      modelImageUrl,
+      asyncJobId: outfit.tryOnAsyncJobId ?? null,
+      asyncStep,
+      resultStoragePath: newPath,
+      costCents: 0,
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      completedAt: startedAt,
+    });
+    await tx.insert(migrationLog).values({
+      userId: newUserId,
+      legacyEntityType: 'try_on_job',
+      legacyId: `${outfit.id}:tryon`,
+      newEntityType: 'try_on_job',
+      newId: newJobId,
+    });
+  });
+
+  log(`try-on ${idx}/${total}: ${outfit.id} — done`);
+  return { migrated: true, skipped: false };
 }
 
 async function getOrCreateSyntheticContext(args: {
@@ -1115,16 +1314,20 @@ async function verifyMigration(args: { newUserId: string }): Promise<void> {
 
 // ─── Image transfer ───
 
-async function transferImage(legacyPath: string, newPath: string): Promise<void> {
-  const bucket = getLegacyBucket();
+async function transferImage(
+  legacyPath: string,
+  newPath: string,
+  bucket: string = ITEM_PHOTOS_BUCKET,
+): Promise<void> {
+  const legacy = getLegacyBucket();
   const supabase = getSupabaseAdmin();
 
   let lastErr: unknown = null;
   for (let attempt = 0; attempt <= IMAGE_TRANSFER_RETRIES; attempt++) {
     try {
-      const [buffer] = await bucket.file(legacyPath).download();
+      const [buffer] = await legacy.file(legacyPath).download();
       const { error } = await supabase.storage
-        .from(ITEM_PHOTOS_BUCKET)
+        .from(bucket)
         .upload(newPath, buffer, {
           contentType: 'image/jpeg',
           upsert: true,
@@ -1140,6 +1343,31 @@ async function transferImage(legacyPath: string, newPath: string): Promise<void>
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+/**
+ * Ensure the try-on results bucket exists. Idempotent — checks via
+ * listBuckets first and only creates if missing. Skipped in dry-run.
+ *
+ * Mirrors setup-models-bucket.mjs but for the private try-on bucket
+ * used by the existing tryon/process.ts (so when migration completes
+ * the bucket is already there for ongoing real-time try-on jobs too).
+ */
+async function ensureTryOnBucket(): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { data: buckets, error: listErr } = await supabase.storage.listBuckets();
+  if (listErr) throw new Error(`listBuckets failed: ${listErr.message}`);
+  if (buckets?.some((b) => b.name === TRY_ON_BUCKET)) {
+    log(`try-on bucket "${TRY_ON_BUCKET}" already exists`);
+    return;
+  }
+  log(`creating try-on bucket "${TRY_ON_BUCKET}" (private, 5MB limit)`);
+  const { error: createErr } = await supabase.storage.createBucket(TRY_ON_BUCKET, {
+    public: false,
+    fileSizeLimit: 5 * 1024 * 1024,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+  });
+  if (createErr) throw new Error(`createBucket failed: ${createErr.message}`);
 }
 
 async function checkHeic(legacyPath: string): Promise<{ isHeic: boolean; missing: boolean }> {

@@ -103,6 +103,22 @@ Most of these can be done in parallel. Worst-case downtime: ~15 minutes for tela
 - The `SERVICE_ACCOUNT_SECRET` in any test fixture or example
 - Real OpenAI keys in test fixtures (use the mock provider via `MockProvider` from `@tela/ai`)
 
+## Supabase auth linking (Phase 11 dependency)
+
+The Phase 11 multi-user migration relies on **"Allow account linking"**
+being **ON** in Supabase Dashboard → Authentication → Settings. This
+makes Google OAuth attach the Google identity to a pre-created auth
+user (matched by verified email) instead of creating a duplicate. The
+M2 validation harness at
+`packages/capabilities/scripts/validate-auth-linking.ts` confirms this
+behavior end-to-end — it must report PASS before any migration code
+runs against the 9 legacy users.
+
+If a future operator turns linking off, the migration breaks silently:
+pre-created auth users get bypassed, OAuth creates fresh auth UIDs,
+and migrated data ends up orphaned. Don't toggle this without
+re-running the validation harness.
+
 ## Future hardening (not done yet)
 
 - Sentry DSN per environment (currently same DSN for dev and future prod)

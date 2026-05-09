@@ -877,8 +877,24 @@ async function migrateOneOutfit(args: {
       ),
     });
     if (existing) {
-      log(`outfit ${idx}/${total}: ${outfit.id} — already migrated, skipping`);
-      return { skipped: false };
+      // Outfit already migrated. We still need to attempt try-on
+      // migration for it — try-ons (D3 / M4) weren't part of Phase 11
+      // preview, so already-migrated outfits won't have try_on_jobs
+      // attached even though their core data is in place. migrateOneTryOn
+      // is itself idempotent (checks migration_log for `${id}:tryon`),
+      // so this is a no-op when the try-on was already migrated and
+      // a real upgrade when it wasn't.
+      log(`outfit ${idx}/${total}: ${outfit.id} — already migrated; checking try-on`);
+      const tryOn = await migrateOneTryOn({
+        outfit,
+        newOutfitId: existing.newId,
+        legacyUid,
+        newUserId,
+        dryRun,
+        idx,
+        total,
+      });
+      return { skipped: false, tryOn };
     }
   }
 

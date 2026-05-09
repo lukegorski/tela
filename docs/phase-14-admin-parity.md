@@ -576,94 +576,213 @@ Layout: route group NOT used; apps/admin is a dedicated app with its
 own root layout.
 
 ══════════════════════════════════════════════════════════
-SCAFFOLD CHECKLIST (apps/admin):
+SCAFFOLD CHECKLIST (apps/admin) — concrete from apps/web reads:
 ══════════════════════════════════════════════════════════
 
-  apps/admin/package.json                    ("@tela/admin")
-  apps/admin/tsconfig.json                   (extend workspace base)
-  apps/admin/next.config.ts                  (copy from apps/web, trim)
-  apps/admin/postcss.config.mjs              (Tailwind 4 setup)
-  apps/admin/src/app/layout.tsx              (root layout)
-  apps/admin/src/app/page.tsx                (redirect to /users)
-  apps/admin/src/app/globals.css             (copy from apps/web)
-  apps/admin/.eslintrc.json                  (copy from apps/web)
-  apps/admin/src/lib/trpc/client.ts          (point at NEXT_PUBLIC_API_URL)
-  apps/admin/src/lib/supabase/{client,server}.ts (mirror apps/web)
-  Add to root pnpm-workspace.yaml
-  Add to root turbo.json pipeline
-  Add to root package.json scripts (dev, build, typecheck)
-  Update root pnpm verify script to include @tela/admin typecheck
-  Update scripts/check-no-residue.sh to scan apps/admin/src/
+apps/admin/package.json                    ("@tela/admin", same Next/
+                                            React/Tailwind versions
+                                            as apps/web)
+apps/admin/tsconfig.json                   (compilerOptions identical
+                                            to apps/web; paths:
+                                            { "@/*": ["./src/*"] })
+apps/admin/next.config.ts                  Mirror apps/web's:
+                                            - transpilePackages: ['@tela/api']
+                                            - experimental.externalDir: true
+                                            - images.remotePatterns for
+                                              **.supabase.co (admin uses
+                                              <Image> for user photos in
+                                              user-detail tabs)
+apps/admin/postcss.config.mjs              Tailwind 4 setup — VERBATIM
+                                            from apps/web:
+                                              { plugins: { '@tailwindcss/postcss': {} } }
+apps/admin/src/app/globals.css             (copy from apps/web verbatim)
+apps/admin/.eslintrc.json                  (copy from apps/web verbatim)
+Add 'apps/admin' to root pnpm-workspace.yaml
+Add 'apps/admin' pipeline targets to root turbo.json (build, typecheck, dev)
+Add to root package.json scripts:
+  "dev:admin": "turbo dev --filter=@tela/admin"
+Update root verify script to include:
+  pnpm --filter @tela/admin typecheck
+Update scripts/check-no-residue.sh to scan apps/admin/src/ in addition
+  to apps/web/src/ (find the WEB_SRC variable, change to scan an array
+  or run twice)
 
 apps/admin does NOT depend on @tela/db. Pure frontend calling apps/api
-via tRPC + Supabase auth client. No Doppler DB credentials needed.
+via tRPC + Supabase auth. Required env vars (mirrors apps/web):
+  - NEXT_PUBLIC_SUPABASE_URL
+  - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  - SUPABASE_URL (for SSR via @supabase/ssr)
+  - NEXT_PUBLIC_API_URL (where apps/api is served — points at the
+    same API URL as apps/web)
+
+CORS confirmed permissive — apps/api uses `app.use('*', cors())` with
+no origin restriction. No CORS work needed for apps/admin.
 
 ══════════════════════════════════════════════════════════
-RECOVERY (8 pages + 3 components + 6 lib helpers from fd4b451):
+URL STRUCTURE (locked: keep `/admin/*` for backward compat):
 ══════════════════════════════════════════════════════════
 
-PRE_DELETE=fd4b451   # the commit BEFORE Step 1 deletion
+After DNS cut, admin lives at admin.telastyle.app. Two URL choices:
+  (a) Keep /admin/* paths → admin.telastyle.app/admin/users
+       MATCHES legacy URL exactly. Bookmarks preserved.
+  (b) Drop /admin/* paths → admin.telastyle.app/users
+       Cleaner but breaks every legacy bookmark.
 
-# 13 page files (incl. /admin redirect, layout, sub-routes)
-TARGET=apps/admin/src/app
-SOURCE='apps/web/src/app/(admin)/admin'
+LOCKED: (a) keep /admin/* paths. The recovered pages are at
+apps/web/src/app/(admin)/admin/*; recover them to apps/admin/src/app/admin/*
+(the (admin) route group goes away because apps/admin is its own app;
+the literal "admin" URL segment stays).
+
+══════════════════════════════════════════════════════════
+RECOVERY — full list (verified by reading admin pages + layout):
+══════════════════════════════════════════════════════════
+
+The v1 recovery script was incomplete. The recovered admin layout.tsx
+imports things I missed first time:
+  - @/lib/admin (requireAdmin) — server-side admin gate
+  - @/components/ThemeProvider
+  - @/components/AuthProvider
+  - @/trpc/Provider (TRPCProvider)
+And AuthProvider/Provider transitively need:
+  - @/lib/supabase/client + server
+  - @/lib/users
+  - @/lib/auth (landingHref)
+  - @/trpc/client
+  - hooks/useAuth (if AuthProvider uses it)
+
+Plus AdminUserList lived inside (admin)/admin/ as a SHARED component
+(used by /admin/users AND /admin/chat in 14b). That was missing too.
+
+PRE_DELETE=fd4b451   # commit BEFORE Step 1 deletion
+
+TARGET=apps/admin/src
+SOURCE_ADMIN='apps/web/src/app/(admin)/admin'
+SOURCE_WEB='apps/web/src'
+
+# ─── (1) Admin pages — 13 files ───
 for path in \
-  page.tsx layout.tsx \
+  page.tsx \
+  layout.tsx \
+  AdminUserList.tsx \
   costs/page.tsx \
   examples/page.tsx examples/new/page.tsx 'examples/[exampleId]/page.tsx' \
   prompts/page.tsx 'prompts/[name]/page.tsx' \
   rules/page.tsx rules/new/page.tsx 'rules/[ruleId]/page.tsx' \
   users/page.tsx 'users/[userId]/page.tsx'
 do
-  mkdir -p "$TARGET/$(dirname $path)"
-  git show ${PRE_DELETE}:${SOURCE}/${path} > "$TARGET/$path"
+  mkdir -p "$TARGET/app/admin/$(dirname $path)"
+  git show ${PRE_DELETE}:${SOURCE_ADMIN}/${path} > "$TARGET/app/admin/$path"
 done
 
-# 3 admin form components → apps/admin/src/components/
-mkdir -p apps/admin/src/components
+# ─── (2) Admin form components — 3 files ───
+mkdir -p "$TARGET/components"
 for f in ExampleForm.tsx PromptEditor.tsx RuleForm.tsx; do
-  git show ${PRE_DELETE}:apps/web/src/components/admin/$f > "apps/admin/src/components/$f"
+  git show ${PRE_DELETE}:apps/web/src/components/admin/$f > "$TARGET/components/$f"
 done
 
-# 6 admin lib helpers → apps/admin/src/lib/
+# ─── (3) Admin lib helpers — 6 files ───
+mkdir -p "$TARGET/lib"
 for f in admin-costs admin-examples admin-prompts admin-rules admin-stats admin-users; do
-  git show ${PRE_DELETE}:apps/web/src/lib/$f.ts > "apps/admin/src/lib/$f.ts"
+  git show ${PRE_DELETE}:apps/web/src/lib/$f.ts > "$TARGET/lib/$f.ts"
 done
 
-After recovery, fix imports — anything @/components/X or @/lib/X
-in the recovered files needs to resolve to apps/admin's tsconfig
-path mapping. Add path aliases to apps/admin/tsconfig.json matching
-apps/web's pattern.
+# ─── (4) Server-side admin gate ───
+git show ${PRE_DELETE}:apps/web/src/lib/admin.ts > "$TARGET/lib/admin.ts"
 
-ALSO add /admin/stylist redirect:
-  apps/admin/src/app/stylist/page.tsx → redirect('/rules')
+# ─── (5) Shared providers + auth (DUPLICATE from current apps/web —
+#         not from fd4b451, since apps/web has had updates since) ───
+mkdir -p "$TARGET/components" "$TARGET/lib/supabase" "$TARGET/trpc" "$TARGET/hooks"
+cp apps/web/src/components/{AuthProvider,ThemeProvider,LoadingSpinner}.tsx "$TARGET/components/"
+cp apps/web/src/lib/supabase/{client,server}.ts "$TARGET/lib/supabase/"
+cp apps/web/src/lib/{users,auth}.ts "$TARGET/lib/"
+cp apps/web/src/trpc/{client,Provider}.tsx "$TARGET/trpc/" 2>/dev/null || \
+  cp apps/web/src/trpc/{client.ts,Provider.tsx} "$TARGET/trpc/"
+# Verify if useAuth.ts is referenced; if so, copy it too:
+grep -l "useAuth" "$TARGET/components/AuthProvider.tsx" >/dev/null && \
+  cp apps/web/src/hooks/useAuth.ts "$TARGET/hooks/"
+
+# ─── (6) Stylist redirect (NEW — not in legacy or fd4b451 directly) ───
+mkdir -p "$TARGET/app/admin/stylist"
+cat > "$TARGET/app/admin/stylist/page.tsx" <<'EOF'
+import { redirect } from 'next/navigation';
+// Per Phase 14 P2: legacy /admin/stylist was a single textarea.
+// We replaced it with /admin/{rules, examples, prompts}. Redirect
+// preserves the legacy URL for bookmark compat.
+export default function StylistPage() {
+  redirect('/admin/rules');
+}
+EOF
+
+══════════════════════════════════════════════════════════
+POST-RECOVERY CHECK:
+══════════════════════════════════════════════════════════
+
+After running the recovery script:
+1. Run `pnpm verify` — expect TS errors. Fix them by:
+   - Confirming tsconfig path alias `@/* → ./src/*` resolves all imports
+   - Some recovered admin pages may reference apps/web-only types or
+     newer schema fields. Compare against current capability shapes if
+     any errors mention undefined exports.
+2. Run `grep -rn "from '@/lib/firebase'" apps/admin/src/` — must return
+   ZERO. (None should — but defense in depth in case fd4b451 had any
+   stragglers I missed.)
+3. Run the no-residue script against apps/admin/src/ — expect ZERO
+   firebase / Firestore references in the recovered code.
 
 ══════════════════════════════════════════════════════════
 ADMINSHELL CHROME (port from legacy, keep is_admin auth):
 ══════════════════════════════════════════════════════════
 
-Port the chrome layout from legacy AdminShell.tsx (333 lines):
-- AdminNav: top bar with Tela logo (left) + 5 nav links (center,
-  desktop) + hamburger button (right, mobile)
-- 5 NAV_ITEMS in this order:
-    { href: '/users', label: 'Users' }
-    { href: '/activity', label: 'Activity' }
-    { href: '/chat', label: 'Chat' }
-    { href: '/costs', label: 'Costs' }
-    { href: '/stylist', label: 'Stylist' }   (redirects to /rules)
-- AdminGate: replaces legacy's NEXT_PUBLIC_ADMIN_UID check with our
-  isAdmin pattern:
-    Call auth.whoami via tRPC on mount. If whoami.isAdmin !== true,
-    show "This account does not have admin access." + sign-out button.
-    If unauthenticated, show AdminLogin (sign in with Google via
-    Supabase OAuth — same flow as apps/web).
-- Sliding mobile menu: matches apps/web's Navbar slide-in right
-  panel pattern (450ms ease-out, backdrop click closes, ESC key
-  closes, body scroll lock when open).
-- AI panel toggle button (Claude icon, top-right desktop) is a
-  placeholder in 14a — clicking shows "AI panel coming in Phase 14c"
-  toast, OR is hidden entirely until 14c. RECOMMEND: hide until 14c
-  to avoid dead UI.
+Port the chrome layout from legacy AdminShell.tsx (333 lines).
+The recovered fd4b451 layout.tsx is a placeholder — REPLACE it with
+a proper AdminShell-style chrome that matches admin.telastyle.app.
+
+Components to build in apps/admin/src/components/admin-chrome/:
+- AdminShell.tsx (top-level wrapper: ThemeProvider > AuthProvider >
+  TRPCProvider > AdminGate)
+- AdminNav.tsx (top bar: Tela logo left, 5 nav links center desktop,
+  Claude AI button + hamburger right)
+- AdminGate.tsx (auth + isAdmin check using whoami)
+- AdminLogin.tsx (Google sign-in via Supabase OAuth)
+- TelaLogo.tsx (port the inline SVG from legacy AdminShell:35-43)
+
+5 NAV_ITEMS in this exact order:
+  { href: '/admin/users',    label: 'Users' }
+  { href: '/admin/activity', label: 'Activity' }    (placeholder 404 in 14a; built in 14b)
+  { href: '/admin/chat',     label: 'Chat' }        (placeholder 404 in 14a; built in 14b)
+  { href: '/admin/costs',    label: 'Costs' }
+  { href: '/admin/stylist',  label: 'Stylist' }     (redirects to /admin/rules)
+
+Note: clicking Activity / Chat in 14a will land on /admin/activity
+and /admin/chat which don't exist yet — Next 16 will 404. That's
+expected; 14b builds them. Optionally add a placeholder page that
+says "Coming soon" — your call.
+
+AdminGate auth flow (replaces legacy's NEXT_PUBLIC_ADMIN_UID):
+1. Read whoami via tRPC client-side on mount
+2. If `loading` → show LoadingSpinner
+3. If no user → show <AdminLogin /> (Google OAuth via Supabase)
+4. If user but `whoami.isAdmin !== true` → show "This account does
+   not have admin access. Sign out" + sign-out button
+5. If user AND isAdmin → render <AdminNav> + <main>{children}</main>
+
+The recovered layout.tsx ALREADY does requireAdmin() server-side
+for RSC pages. AdminGate is the client-side equivalent for client
+components. Both should be in place — defense in depth.
+
+Sliding mobile menu: port from legacy AdminShell:142-202. Matches
+apps/web's Navbar slide-in right panel (450ms ease-out, backdrop
+click closes, ESC key closes, body scroll lock when open).
+
+AI panel toggle button (Claude icon, top-right desktop):
+- 14a: HIDDEN entirely (don't render the button until 14c). Avoids
+  dead UI.
+- 14c: wires it to toggle the AdminAiPanel slide-out.
+
+ClaudeIcon SVG: port verbatim from legacy AdminShell.tsx:25-30 (one
+of the SVG paths you'll lift wholesale). Save reading time by
+copying the entire `<svg>` block; the `<path d="...">` is the orange
+Claude logo path.
 
 DO NOT port the AdminAiPanel slide-out yet (14c).
 

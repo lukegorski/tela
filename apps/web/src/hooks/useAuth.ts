@@ -222,118 +222,28 @@ export function useAuth(): UseAuthReturn {
   }, [supabase, fetchProfile]);
 
   const signInWithGoogle = useCallback(async () => {
-    // Popup-based flow that mirrors legacy Firebase signInWithPopup:
-    //   1. Ask Supabase for the OAuth URL (skipBrowserRedirect=true so it
-    //      doesn't navigate the parent tab).
-    //   2. Open the URL in a small popup window.
-    //   3. The popup completes Google OAuth → /auth/callback?popup=1
-    //      exchanges the code for a session (server-side cookies set) and
-    //      responds with an HTML page that postMessages the parent and
-    //      closes itself.
-    //   4. We listen for that postMessage, then refresh the supabase
-    //      session so onAuthStateChange fires with the new user.
-    const next = window.location.pathname || '/';
-    const redirectTo = `${window.location.origin}/auth/callback?popup=1&next=${encodeURIComponent(next)}`;
-
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    // Redirect-based OAuth (Supabase's native, robust path). We tried a
+    // popup-based flow to mirror legacy Firebase signInWithPopup UX, but
+    // Chrome's COOP rules consistently broke the parent's ability to
+    // observe popup.closed once the popup was on accounts.google.com,
+    // and the resulting Web-Locks contention cascaded into
+    // supabase.auth.getSession() hangs that broke every tRPC call. The
+    // redirect flow doesn't fight any of that — Google → Supabase
+    // callback → cookie set → page reloads → onAuthStateChange fires
+    // normally → tRPC sees the access token.
+    //
+    // `prompt=select_account` is preserved from the popup attempt: it
+    // forces Google to show the account picker instead of silently
+    // auto-selecting the most-recently-used session.
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(window.location.pathname)}`;
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        skipBrowserRedirect: true,
         redirectTo,
-        // `prompt=select_account` forces Google to show the account picker
-        // every time instead of silently auto-selecting the last-used
-        // session. Without this, users with multiple Google accounts in
-        // the browser get logged in as whichever Google last wrote to a
-        // session cookie, which is rarely what they want — especially
-        // confusing when an old test account auto-selects over the
-        // primary one. Matches legacy Firebase Auth's effective default.
         queryParams: { prompt: 'select_account' },
       },
     });
     if (error) throw error;
-    if (!data?.url) throw new Error('Sign-in failed: provider URL missing');
-
-    // Center the popup on the current browser window (multi-monitor friendly,
-    // matches user expectation that the popup appears over their active
-    // window). Without explicit left/top, browsers default to the top-left
-    // corner of the screen — visually messy and unlike legacy Firebase
-    // signInWithPopup, which centers via similar math internally.
-    const popupWidth = 520;
-    const popupHeight = 720;
-    const popupLeft = window.screenX + Math.max(0, (window.outerWidth - popupWidth) / 2);
-    const popupTop = window.screenY + Math.max(0, (window.outerHeight - popupHeight) / 2);
-
-    const popup = window.open(
-      data.url,
-      'tela_oauth',
-      `width=${popupWidth},height=${popupHeight},left=${Math.floor(popupLeft)},top=${Math.floor(popupTop)},resizable=yes,scrollbars=yes,status=no,toolbar=no,menubar=no`,
-    );
-    if (!popup) {
-      throw new Error('Popup blocked — please allow popups for this site and try again');
-    }
-
-    interface OAuthOkPayload {
-      __tela_oauth: true;
-      status: 'ok';
-      next?: string;
-      access_token?: string;
-      refresh_token?: string;
-    }
-    interface OAuthErrorPayload {
-      __tela_oauth: true;
-      status: 'error';
-      message?: string;
-    }
-    type OAuthPayload = OAuthOkPayload | OAuthErrorPayload;
-
-    const tokens = await new Promise<{ access_token: string; refresh_token: string }>(
-      (resolve, reject) => {
-        const cleanup = () => {
-          window.removeEventListener('message', handler);
-          clearInterval(closeWatcher);
-        };
-        const handler = (event: MessageEvent) => {
-          if (event.origin !== window.location.origin) return;
-          const payload = event.data;
-          if (
-            typeof payload !== 'object' ||
-            payload === null ||
-            (payload as { __tela_oauth?: unknown }).__tela_oauth !== true
-          ) {
-            return;
-          }
-          const data = payload as OAuthPayload;
-          cleanup();
-          if (data.status === 'ok') {
-            if (!data.access_token || !data.refresh_token) {
-              reject(new Error('Sign-in succeeded server-side but no tokens were returned'));
-              return;
-            }
-            resolve({ access_token: data.access_token, refresh_token: data.refresh_token });
-          } else {
-            reject(new Error(data.message || 'Sign-in failed'));
-          }
-        };
-        window.addEventListener('message', handler);
-
-        // Detect popup-closed (user dismissed the window before completing).
-        const closeWatcher = setInterval(() => {
-          if (popup.closed) {
-            cleanup();
-            reject(new Error('Sign-in cancelled'));
-          }
-        }, 500);
-      },
-    );
-
-    // setSession() directly installs the session in the parent's
-    // @supabase/ssr browser client and fires onAuthStateChange — the
-    // existing useAuth effect picks up the new user + profile from
-    // there. This is more reliable than refreshSession() because it
-    // doesn't depend on the cookie store sync between the popup's
-    // server-side handler and the parent's browser client.
-    const { error: setError } = await supabase.auth.setSession(tokens);
-    if (setError) throw setError;
   }, [supabase]);
 
   const signInWithEmail = useCallback(

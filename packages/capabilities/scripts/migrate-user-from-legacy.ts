@@ -1,24 +1,38 @@
 #!/usr/bin/env tsx
 /**
- * One-shot CLI: migrate a single user from the legacy Tela app
- * (Firebase) into the new Supabase backend. Wraps the
- * `migrateLegacyUser` library at `../src/migration/migrateLegacyUser.ts`.
+ * Multi-mode CLI for the legacy Tela → Supabase migration.
  *
- * Read `docs/migration-luke-one-shot.md` for the full spec
- * (decisions M1-M12). Run procedure (M10):
+ * Modes (mutually exclusive):
+ *   --list                       Print the legacy user inventory (no writes).
+ *   --pre-create-users           Pre-create Supabase auth + app users rows
+ *                                for each legacy user (mirrors what D1's
+ *                                M2 validation manually demonstrated).
+ *                                Idempotent.
+ *   --legacy-email <email>       Single-user migration (default mode).
+ *   --legacy-uid <uid>           Single-user migration with explicit IDs
+ *     --new-user-id <uuid>       (use when legacy/new emails differ).
+ *   --all                        Multi-user migration: enumerate legacy
+ *                                users + run migrateLegacyUser for each.
  *
+ * Filters (apply to --pre-create-users and --all):
+ *   --skip user1@x,user2@y       Comma-separated emails to exclude.
+ *   --only user1@x,user2@y       Comma-separated emails to include only.
+ *
+ * Other flags:
+ *   --dry-run                    Preview only — no DB writes / image uploads.
+ *   --only profile|wardrobe|outfits|all  Restrict per-user migration scope.
+ *   --include-images             Transfer images Firebase → Supabase.
+ *   --include-outfits            Migrate outfits incl. synthetic ctx + gen.
+ *   -y, --yes                    Skip the M11 interactive confirmation.
+ *   -h, --help
+ *
+ * Read docs/phase-11-multi-user-migration.md for the full spec
+ * (decisions M1-M12). Wraps the migrateLegacyUser library.
+ *
+ * Run procedure (M10): copy 4 legacy env vars to Doppler dev, then:
  *   ~/bin/doppler run --project tela --config dev -- \
  *     pnpm --filter @tela/capabilities exec tsx \
- *     scripts/migrate-user-from-legacy.ts \
- *     --legacy-email luke@lukegorski.com --dry-run
- *
- * Then re-run without `--dry-run` to actually migrate. The M11 confirmation
- * gate prints the resolved IDs + preview counts and waits for `y` before
- * any DB writes or image transfers.
- *
- * D.13a (no images, no outfits) and D.13b (full) are toggled with the
- * `--include-images` / `--include-outfits` flags. D.13a runs without
- * either; D.13b enables both.
+ *     scripts/migrate-user-from-legacy.ts <flags>
  */
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
@@ -26,29 +40,56 @@ import { stdin as input, stdout as output } from 'node:process';
 import {
   migrateLegacyUser,
   resolveIdsByEmail,
+  preCreateUser,
+  enumerateLegacyUsers,
+  applyEmailFilters,
 } from '../src/migration/index.js';
-import type { MigrateOptions, MigrateResult } from '../src/migration/index.js';
+import type {
+  MigrateOptions,
+  MigrateResult,
+  PreCreateResult,
+} from '../src/migration/index.js';
 import { getLegacyDb } from '../src/migration/firebase.js';
 
+type Mode = 'list' | 'pre-create-users' | 'all' | 'single';
+
 interface CliArgs {
+  mode: Mode;
+  // single-user (mode='single')
   legacyEmail?: string;
   legacyUid?: string;
   newUserId?: string;
+  // filters (mode='pre-create-users' | 'all')
+  skip: string[];
+  only: string[];
+  // shared
   dryRun: boolean;
-  only: 'profile' | 'wardrobe' | 'outfits' | 'all';
+  onlySection: 'profile' | 'wardrobe' | 'outfits' | 'all';
   includeImages: boolean;
   includeOutfits: boolean;
   yes: boolean;
 }
 
 function parseArgs(argv: string[]): CliArgs {
+  let mode: Mode | null = null;
   const args: CliArgs = {
+    mode: 'single',
+    skip: [],
+    only: [],
     dryRun: false,
-    only: 'all',
+    onlySection: 'all',
     includeImages: false,
     includeOutfits: false,
     yes: false,
   };
+
+  const setMode = (next: Mode, source: string) => {
+    if (mode !== null && mode !== next) {
+      throw new Error(`${source} conflicts with --${mode} (modes are mutually exclusive)`);
+    }
+    mode = next;
+  };
+
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const next = (): string => {
@@ -57,26 +98,45 @@ function parseArgs(argv: string[]): CliArgs {
       return v;
     };
     switch (arg) {
+      case '--list':
+        setMode('list', '--list');
+        break;
+      case '--pre-create-users':
+        setMode('pre-create-users', '--pre-create-users');
+        break;
+      case '--all':
+        setMode('all', '--all');
+        break;
       case '--legacy-email':
         args.legacyEmail = next();
+        setMode('single', '--legacy-email');
         break;
       case '--legacy-uid':
         args.legacyUid = next();
+        setMode('single', '--legacy-uid');
         break;
       case '--new-user-id':
         args.newUserId = next();
+        setMode('single', '--new-user-id');
         break;
+      case '--skip':
+        args.skip = next().split(',').map((s) => s.trim()).filter(Boolean);
+        break;
+      case '--only': {
+        // Two semantics for --only depending on its argument shape:
+        //   --only <emails>   filter list (used with --pre-create-users / --all)
+        //   --only <section>  scope a single-user migration (profile|wardrobe|outfits|all)
+        const v = next();
+        if (v === 'profile' || v === 'wardrobe' || v === 'outfits' || v === 'all') {
+          args.onlySection = v;
+        } else {
+          args.only = v.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+        break;
+      }
       case '--dry-run':
         args.dryRun = true;
         break;
-      case '--only': {
-        const v = next();
-        if (v !== 'profile' && v !== 'wardrobe' && v !== 'outfits' && v !== 'all') {
-          throw new Error(`--only must be one of profile|wardrobe|outfits|all (got ${v})`);
-        }
-        args.only = v;
-        break;
-      }
       case '--include-images':
         args.includeImages = true;
         break;
@@ -96,77 +156,61 @@ function parseArgs(argv: string[]): CliArgs {
         throw new Error(`Unknown arg: ${arg}`);
     }
   }
+  args.mode = mode ?? 'single';
   return args;
 }
 
 function printHelp(): void {
   // eslint-disable-next-line no-console
-  console.log(`migrate-user-from-legacy — one-shot legacy Tela → Supabase user migration
+  console.log(`migrate-user-from-legacy — Phase 11 multi-user migration CLI
 
-Usage:
-  tsx scripts/migrate-user-from-legacy.ts --legacy-email <email> [flags]
-  tsx scripts/migrate-user-from-legacy.ts --legacy-uid <uid> --new-user-id <uuid> [flags]
+Modes (mutually exclusive — pick one):
+  --list                       Print legacy user inventory (no writes).
+  --pre-create-users           Pre-create Supabase auth + app users for
+                               each legacy user (mirrors D1 / M2). Idempotent.
+  --legacy-email <email>       Single-user migration (default).
+  --legacy-uid <uid>
+    --new-user-id <uuid>       Single-user migration with explicit IDs.
+  --all                        Multi-user migration over all legacy users.
 
-Flags:
-  --legacy-email <email>      Resolve both legacy uid + new user_id by email (default mode).
-  --legacy-uid <uid>          Override legacy uid resolution.
-  --new-user-id <uuid>        Override new user_id resolution. Required with --legacy-uid.
-  --dry-run                   Preview only — no DB writes, no image uploads, no confirmation prompt.
-  --only <section>            Restrict to one section: profile|wardrobe|outfits|all (default: all).
-  --include-images            Transfer images Firebase → Supabase (D.13b).
-  --include-outfits           Migrate outfits incl. synthetic context+generation (D.13b).
-  -y, --yes                   Skip the M11 interactive confirmation prompt (use with care).
-  -h, --help                  Show this help.
+Filters (apply to --pre-create-users and --all):
+  --skip <emails>              Comma-separated emails to exclude.
+  --only <emails>              Comma-separated emails to include only.
 
-Run procedure (per migration M10):
+Per-user migration flags (apply to --legacy-email / --legacy-uid / --all):
+  --dry-run                    Preview only — no writes.
+  --only <section>             profile|wardrobe|outfits|all (default: all).
+  --include-images             Transfer images Firebase → Supabase.
+  --include-outfits            Migrate outfits + synthetic ctx + gen.
+  -y, --yes                    Skip M11 interactive confirmation.
+  -h, --help                   Show this help.
 
-  1. Copy 4 env vars from /Users/lukegorski/ale/.env.local to Doppler dev
-     (FIREBASE_ADMIN_PROJECT_ID, FIREBASE_ADMIN_CLIENT_EMAIL,
-      FIREBASE_ADMIN_PRIVATE_KEY, NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET).
-  2. Dry-run first:
-       ~/bin/doppler run --project tela --config dev -- \\
-         pnpm --filter @tela/capabilities exec tsx \\
-         scripts/migrate-user-from-legacy.ts \\
-         --legacy-email luke@lukegorski.com --dry-run
-  3. Real run (interactive y/N gate):
-       ~/bin/doppler run --project tela --config dev -- \\
-         pnpm --filter @tela/capabilities exec tsx \\
-         scripts/migrate-user-from-legacy.ts \\
-         --legacy-email luke@lukegorski.com \\
-         --include-images --include-outfits
-  4. Remove the 4 legacy env vars from Doppler.
+Examples:
+
+  # See who would be migrated
+  ... --list
+
+  # Pre-create everyone (idempotent — safe to re-run)
+  ... --pre-create-users
+  ... --pre-create-users --skip a@x.com,b@y.com
+  ... --pre-create-users --only luke@lukegorski.com
+
+  # Dry-run a single user
+  ... --legacy-email luke@lukegorski.com --dry-run \\
+        --include-images --include-outfits
+
+  # Real run for a single user
+  ... --legacy-email luke@lukegorski.com \\
+        --include-images --include-outfits
+
+  # Real run for all users (after pre-create + verification)
+  ... --all --include-images --include-outfits --yes
+
+Run procedure: see docs/phase-11-multi-user-migration.md (M10).
 `);
 }
 
-async function readPreviewCounts(args: {
-  legacyUid: string;
-  newUserId: string;
-}): Promise<{ wardrobeItems: number; outfits: number; syntheticContexts: number }> {
-  const legacyDb = getLegacyDb();
-  const userRef = legacyDb.collection('users').doc(args.legacyUid);
-  const [itemsSnap, outfitsSnap] = await Promise.all([
-    userRef.collection('wardrobeItems').get(),
-    userRef.collection('outfits').get(),
-  ]);
-
-  const tuples = new Set<string>();
-  for (const doc of outfitsSnap.docs) {
-    const data = doc.data() as { occasion?: string; season?: string[] };
-    const occasion = data.occasion ?? 'Everyday';
-    const seasonRaw = (data.season?.[0] ?? '').toLowerCase();
-    const season =
-      seasonRaw === 'spring' || seasonRaw === 'summer' || seasonRaw === 'fall' || seasonRaw === 'winter'
-        ? seasonRaw
-        : 'fall';
-    tuples.add(`${occasion}::${season}`);
-  }
-
-  return {
-    wardrobeItems: itemsSnap.size,
-    outfits: outfitsSnap.size,
-    syntheticContexts: tuples.size,
-  };
-}
+// ─── Helpers ───
 
 async function confirm(question: string): Promise<boolean> {
   const rl = createInterface({ input, output });
@@ -178,9 +222,181 @@ async function confirm(question: string): Promise<boolean> {
   }
 }
 
-async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+async function readPreviewCounts(args: { legacyUid: string }): Promise<{
+  wardrobeItems: number;
+  outfits: number;
+  syntheticContexts: number;
+}> {
+  const legacyDb = getLegacyDb();
+  const userRef = legacyDb.collection('users').doc(args.legacyUid);
+  const [itemsSnap, outfitsSnap] = await Promise.all([
+    userRef.collection('wardrobeItems').get(),
+    userRef.collection('outfits').get(),
+  ]);
+  const tuples = new Set<string>();
+  for (const doc of outfitsSnap.docs) {
+    const data = doc.data() as { occasion?: string; season?: string[] };
+    const occasion = data.occasion ?? 'Everyday';
+    const seasonRaw = (data.season?.[0] ?? '').toLowerCase();
+    const season =
+      seasonRaw === 'spring' || seasonRaw === 'summer' || seasonRaw === 'fall' || seasonRaw === 'winter'
+        ? seasonRaw
+        : 'fall';
+    tuples.add(`${occasion}::${season}`);
+  }
+  return {
+    wardrobeItems: itemsSnap.size,
+    outfits: outfitsSnap.size,
+    syntheticContexts: tuples.size,
+  };
+}
 
+// ─── Mode handlers ───
+
+async function runList(): Promise<void> {
+  const records = await enumerateLegacyUsers();
+  records.sort((a, b) => a.email.localeCompare(b.email));
+  // eslint-disable-next-line no-console
+  console.log(`\nLegacy user inventory (${records.length} users):\n`);
+  for (const r of records) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `  ${r.email.padEnd(40)}  uid=${r.legacyUid.padEnd(30)}  name=${r.displayName ?? '(none)'}`,
+    );
+  }
+  // eslint-disable-next-line no-console
+  console.log('');
+}
+
+async function runPreCreate(args: CliArgs): Promise<void> {
+  const all = await enumerateLegacyUsers();
+  const filtered = applyEmailFilters(all, { skip: args.skip, only: args.only });
+  // eslint-disable-next-line no-console
+  console.log(
+    `\nPre-creating ${filtered.length} of ${all.length} legacy users` +
+      (args.skip.length ? ` (skipping ${args.skip.length})` : '') +
+      (args.only.length ? ` (only ${args.only.length})` : '') +
+      '\n',
+  );
+
+  if (filtered.length === 0) {
+    // eslint-disable-next-line no-console
+    console.log('Nothing to do.');
+    return;
+  }
+
+  const results: PreCreateResult[] = [];
+  const failures: Array<{ email: string; reason: string }> = [];
+  for (const record of filtered) {
+    try {
+      const result = await preCreateUser(record.email);
+      results.push(result);
+      // eslint-disable-next-line no-console
+      console.log(
+        `  ✓ ${record.email.padEnd(40)}  ` +
+          (result.actions.length === 0
+            ? '(no-op — already prepared)'
+            : `actions: [${result.actions.join(', ')}]`),
+      );
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      failures.push({ email: record.email, reason });
+      // eslint-disable-next-line no-console
+      console.error(`  ✗ ${record.email.padEnd(40)}  ${reason}`);
+    }
+  }
+
+  // eslint-disable-next-line no-console
+  console.log(`\nSummary: ${results.length} pre-created/healed, ${failures.length} failed.`);
+  if (failures.length > 0) {
+    process.exit(1);
+  }
+}
+
+async function runAll(args: CliArgs): Promise<void> {
+  const all = await enumerateLegacyUsers();
+  const filtered = applyEmailFilters(all, { skip: args.skip, only: args.only });
+  // eslint-disable-next-line no-console
+  console.log(
+    `\nMigrating ${filtered.length} of ${all.length} legacy users` +
+      (args.skip.length ? ` (skipping ${args.skip.length})` : '') +
+      (args.only.length ? ` (only ${args.only.length})` : '') +
+      `, dryRun=${args.dryRun}, includeImages=${args.includeImages}, includeOutfits=${args.includeOutfits}` +
+      '\n',
+  );
+
+  if (filtered.length === 0) {
+    // eslint-disable-next-line no-console
+    console.log('Nothing to do.');
+    return;
+  }
+
+  if (!args.dryRun && !args.yes) {
+    const ok = await confirm(`Proceed with multi-user migration? [yN]: `);
+    if (!ok) {
+      // eslint-disable-next-line no-console
+      console.log('Aborted.');
+      process.exit(0);
+      return;
+    }
+  }
+
+  const opts: MigrateOptions = {
+    dryRun: args.dryRun,
+    only: args.onlySection,
+    includeImages: args.includeImages,
+    includeOutfits: args.includeOutfits,
+  };
+
+  const totals = {
+    migrated: 0,
+    failed: 0,
+    perUser: [] as Array<{ email: string; result?: MigrateResult; reason?: string }>,
+  };
+
+  for (const record of filtered) {
+    // eslint-disable-next-line no-console
+    console.log(`\n──── ${record.email} ────`);
+    try {
+      const ids = await resolveIdsByEmail(record.email);
+      const result = await migrateLegacyUser(ids.legacyUid, ids.newUserId, opts);
+      totals.migrated += 1;
+      totals.perUser.push({ email: record.email, result });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      totals.failed += 1;
+      totals.perUser.push({ email: record.email, reason });
+      // eslint-disable-next-line no-console
+      console.error(`  ✗ ${record.email}: ${reason}`);
+    }
+  }
+
+  // eslint-disable-next-line no-console
+  console.log(`\n──── Summary ────`);
+  // eslint-disable-next-line no-console
+  console.log(
+    `  ${totals.migrated} migrated, ${totals.failed} failed (out of ${filtered.length})`,
+  );
+  for (const u of totals.perUser) {
+    if (u.reason) {
+      // eslint-disable-next-line no-console
+      console.log(`  ✗ ${u.email}: ${u.reason}`);
+    } else if (u.result) {
+      const r = u.result;
+      // eslint-disable-next-line no-console
+      console.log(
+        `  ✓ ${u.email}: profile=${r.profile.fieldsUpdated.length} fields, ` +
+          `wardrobe=${r.wardrobe.migrated} migrated/${r.wardrobe.skipped.length} skipped, ` +
+          `outfits=${r.outfits.migrated} migrated/${r.outfits.skipped.length} skipped`,
+      );
+    }
+  }
+  if (totals.failed > 0) {
+    process.exit(1);
+  }
+}
+
+async function runSingle(args: CliArgs): Promise<void> {
   // ─── Resolve identity (M9) ───
   let legacyUid: string;
   let legacyEmail: string;
@@ -200,7 +416,8 @@ async function main(): Promise<void> {
   } else {
     // eslint-disable-next-line no-console
     console.error(
-      'ERROR: either --legacy-email, or both --legacy-uid and --new-user-id, are required.',
+      'ERROR: pass either --legacy-email <email>, or both --legacy-uid <uid> and --new-user-id <uuid>.\n' +
+        'For multi-user mode, use --pre-create-users / --all / --list instead.',
     );
     printHelp();
     process.exit(2);
@@ -208,7 +425,7 @@ async function main(): Promise<void> {
   }
 
   // ─── Preview (M11) ───
-  const counts = await readPreviewCounts({ legacyUid, newUserId });
+  const counts = await readPreviewCounts({ legacyUid });
 
   // eslint-disable-next-line no-console
   console.log(`
@@ -216,14 +433,13 @@ Resolved IDs:
   Legacy uid:    ${legacyUid} (email: ${legacyEmail})
   New user_id:   ${newUserId} (email: ${newEmail})
 
-About to migrate (only=${args.only}, includeImages=${args.includeImages}, includeOutfits=${args.includeOutfits}, dryRun=${args.dryRun}):
+About to migrate (only=${args.onlySection}, includeImages=${args.includeImages}, includeOutfits=${args.includeOutfits}, dryRun=${args.dryRun}):
   - Profile: non-destructive merge — only fills empty new-app fields
   - Wardrobe: ${counts.wardrobeItems} legacy items
   - Outfits: ${counts.outfits} legacy outfits
   - Synthetic ctx tuples: ${counts.syntheticContexts}
 `);
 
-  // Skip confirmation in dry-run, on --yes, or when only=profile (low blast radius).
   const needsConfirmation = !args.dryRun && !args.yes;
   if (needsConfirmation) {
     const ok = await confirm('Proceed? [yN]: ');
@@ -235,10 +451,9 @@ About to migrate (only=${args.only}, includeImages=${args.includeImages}, includ
     }
   }
 
-  // ─── Run ───
   const opts: MigrateOptions = {
     dryRun: args.dryRun,
-    only: args.only,
+    only: args.onlySection,
     includeImages: args.includeImages,
     includeOutfits: args.includeOutfits,
   };
@@ -257,11 +472,10 @@ About to migrate (only=${args.only}, includeImages=${args.includeImages}, includ
     return;
   }
 
-  // ─── Summary ───
-  printSummary(result, args);
+  printSingleSummary(result, args);
 }
 
-function printSummary(result: MigrateResult, args: CliArgs): void {
+function printSingleSummary(result: MigrateResult, args: CliArgs): void {
   const lines: string[] = [];
   lines.push('');
   lines.push(`✓ Done in ${(result.durationMs / 1000).toFixed(1)}s`);
@@ -307,6 +521,26 @@ function printSummary(result: MigrateResult, args: CliArgs): void {
   }
   // eslint-disable-next-line no-console
   console.log(lines.join('\n'));
+}
+
+// ─── Entry ───
+
+async function main(): Promise<void> {
+  const args = parseArgs(process.argv.slice(2));
+  switch (args.mode) {
+    case 'list':
+      await runList();
+      break;
+    case 'pre-create-users':
+      await runPreCreate(args);
+      break;
+    case 'all':
+      await runAll(args);
+      break;
+    case 'single':
+      await runSingle(args);
+      break;
+  }
 }
 
 main().catch((err) => {

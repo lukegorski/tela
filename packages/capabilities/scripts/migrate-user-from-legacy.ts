@@ -279,9 +279,10 @@ async function runPreCreate(args: CliArgs): Promise<void> {
   const filtered = applyEmailFilters(all, { skip: args.skip, only: args.only });
   // eslint-disable-next-line no-console
   console.log(
-    `\nPre-creating ${filtered.length} of ${all.length} legacy users` +
+    `\n${args.dryRun ? 'WOULD pre-create' : 'Pre-creating'} ${filtered.length} of ${all.length} legacy users` +
       (args.skip.length ? ` (skipping ${args.skip.length})` : '') +
       (args.only.length ? ` (only ${args.only.length})` : '') +
+      (args.dryRun ? ' [DRY RUN — no writes]' : '') +
       '\n',
   );
 
@@ -295,11 +296,11 @@ async function runPreCreate(args: CliArgs): Promise<void> {
   const failures: Array<{ email: string; reason: string }> = [];
   for (const record of filtered) {
     try {
-      const result = await preCreateUser(record.email);
+      const result = await preCreateUser(record.email, { dryRun: args.dryRun });
       results.push(result);
       // eslint-disable-next-line no-console
       console.log(
-        `  ✓ ${record.email.padEnd(40)}  ` +
+        `  ${args.dryRun ? '·' : '✓'} ${record.email.padEnd(40)}  ` +
           (result.actions.length === 0
             ? '(no-op — already prepared)'
             : `actions: [${result.actions.join(', ')}]`),
@@ -313,7 +314,9 @@ async function runPreCreate(args: CliArgs): Promise<void> {
   }
 
   // eslint-disable-next-line no-console
-  console.log(`\nSummary: ${results.length} pre-created/healed, ${failures.length} failed.`);
+  console.log(
+    `\nSummary: ${results.length} ${args.dryRun ? 'previewed' : 'pre-created/healed'}, ${failures.length} failed.`,
+  );
   if (failures.length > 0) {
     process.exit(1);
   }
@@ -370,7 +373,13 @@ async function runAll(args: CliArgs): Promise<void> {
       totals.migrated += 1;
       totals.perUser.push({ email: record.email, result });
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
+      let reason = err instanceof Error ? err.message : String(err);
+      // Multi-user UX: rewrite the resolveIdsByEmail no-app-account error
+      // (which advises a single user to "sign up at /en first") to point
+      // operators at the correct flag for the multi-user flow.
+      if (reason.includes('No new-app account found for email')) {
+        reason = `app users row missing — run --pre-create-users (or --pre-create-users --only ${record.email}) first`;
+      }
       totals.failed += 1;
       totals.perUser.push({ email: record.email, reason });
       // eslint-disable-next-line no-console

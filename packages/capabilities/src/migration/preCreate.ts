@@ -43,8 +43,10 @@ export interface PreCreateResult {
   email: string;
   authUserId: string;
   newUserId: string;
-  /** What the pre-create did, in the order it did it. */
+  /** What the pre-create did, in the order it did it. In dry-run mode, the actions that WOULD have been performed. */
   actions: PreCreateAction[];
+  /** True if any writes (create/insert/patch) were skipped because dryRun=true. */
+  dryRun: boolean;
 }
 
 export type PreCreateAction =
@@ -54,6 +56,11 @@ export type PreCreateAction =
   | 'patched_auth_user_id'
   | 'set_onboarding_complete'
   | 'set_try_on_settings';
+
+export interface PreCreateOptions {
+  /** If true, no writes — just inspect current state and report what would happen. */
+  dryRun?: boolean;
+}
 
 /**
  * Enumerate all legacy users via Firebase Auth's paginated listing.
@@ -100,8 +107,16 @@ async function readLegacyProfile(legacyUid: string): Promise<LegacyUserProfile |
  * Idempotent: every step checks current state and only writes what's
  * missing or wrong. Re-running on a fully-prepared user is a no-op
  * (returns actions=[]).
+ *
+ * Pass `{ dryRun: true }` to preview the actions that WOULD be taken
+ * without performing any writes. Returned UUIDs in dry-run mode for
+ * not-yet-existing rows are zero-UUIDs (placeholder).
  */
-export async function preCreateUser(legacyEmail: string): Promise<PreCreateResult> {
+export async function preCreateUser(
+  legacyEmail: string,
+  opts: PreCreateOptions = {},
+): Promise<PreCreateResult> {
+  const dryRun = opts.dryRun ?? false;
   const email = legacyEmail.trim().toLowerCase();
 
   // ─── Resolve legacy uid + display fields ───
@@ -124,6 +139,7 @@ export async function preCreateUser(legacyEmail: string): Promise<PreCreateResul
   const legacyLocale = legacyProfile?.locale ?? null;
 
   const actions: PreCreateAction[] = [];
+  const PLACEHOLDER_UUID = '00000000-0000-0000-0000-000000000000';
 
   // ─── Auth side ───
   const supabase = getSupabaseAdmin();
@@ -132,6 +148,9 @@ export async function preCreateUser(legacyEmail: string): Promise<PreCreateResul
   if (existingAuth) {
     authUserId = existingAuth.id;
     actions.push('reused_auth_user');
+  } else if (dryRun) {
+    authUserId = PLACEHOLDER_UUID;
+    actions.push('created_auth_user');
   } else {
     const { data, error } = await supabase.auth.admin.createUser({
       email,
@@ -156,20 +175,24 @@ export async function preCreateUser(legacyEmail: string): Promise<PreCreateResul
 
   let newUserId: string;
   if (!existingApp) {
-    const [created] = await db
-      .insert(users)
-      .values({
-        authUserId,
-        email,
-        displayName: legacyDisplayName,
-        avatarUrl: legacyPhotoUrl,
-        locale: legacyLocale ?? 'en',
-        onboardingComplete: true,
-        tryOnSettings: DEFAULT_TRY_ON_SETTINGS,
-      })
-      .returning({ id: users.id });
-    newUserId = created.id;
     actions.push('inserted_app_user');
+    if (dryRun) {
+      newUserId = PLACEHOLDER_UUID;
+    } else {
+      const [created] = await db
+        .insert(users)
+        .values({
+          authUserId,
+          email,
+          displayName: legacyDisplayName,
+          avatarUrl: legacyPhotoUrl,
+          locale: legacyLocale ?? 'en',
+          onboardingComplete: true,
+          tryOnSettings: DEFAULT_TRY_ON_SETTINGS,
+        })
+        .returning({ id: users.id });
+      newUserId = created.id;
+    }
   } else {
     newUserId = existingApp.id;
     // Heal individual fields if drifted from M1+M3 expectations.
@@ -194,7 +217,7 @@ export async function preCreateUser(legacyEmail: string): Promise<PreCreateResul
       patch.tryOnSettings = DEFAULT_TRY_ON_SETTINGS;
       actions.push('set_try_on_settings');
     }
-    if (Object.keys(patch).length > 0) {
+    if (Object.keys(patch).length > 0 && !dryRun) {
       patch.updatedAt = new Date();
       await db.update(users).set(patch).where(eq(users.id, newUserId));
     }
@@ -206,6 +229,7 @@ export async function preCreateUser(legacyEmail: string): Promise<PreCreateResul
     authUserId,
     newUserId,
     actions,
+    dryRun,
   };
 }
 

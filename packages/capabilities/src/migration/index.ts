@@ -9,4 +9,5 @@ export type {
   LegacyUserRecord,
   PreCreateResult,
   PreCreateAction,
+  PreCreateOptions,
 } from './preCreate.js';

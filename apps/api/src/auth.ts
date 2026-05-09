@@ -36,7 +36,22 @@ function getSql() {
   if (_sql) return _sql;
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL required');
-  _sql = postgres(url, { max: 5, idle_timeout: 20, connect_timeout: 10 });
+  // PORT.md pitfall #14: Supabase's transaction-mode pooler (port 6543,
+  // host *.pooler.supabase.com) rebinds each query to a different
+  // backend connection, so prepared statements set up on one connection
+  // aren't visible on the next. Under parallel-request load (e.g., this
+  // auth middleware running on every concurrent tRPC call) the result
+  // is silent stalls — server never responds, browser HTTP/2 stream
+  // stays pending, every subsequent tRPC call queues behind it.
+  // The shared @tela/db client got this fix in 189ff81; apps/api's
+  // own postgres-js connection here was missed.
+  const isPgBouncer = /pooler|:6543/.test(url);
+  _sql = postgres(url, {
+    max: 5,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    prepare: !isPgBouncer,
+  });
   return _sql;
 }
 

@@ -147,31 +147,41 @@ async function findAuthUsersByEmail(email: string): Promise<AuthUserSummary[]> {
   const matches: AuthUserSummary[] = [];
   let page = 1;
   const perPage = 200;
-  // Paginate defensively. For our 9-user scale a single page covers
-  // everything, but keep the loop honest in case we later validate against
-  // a larger pool.
+  // listUsers paginates the user list but doesn't always populate the
+  // `identities` array per row. We collect candidate IDs here, then
+  // re-fetch each one via getUserById which DOES return identities.
+  const candidateIds: string[] = [];
   for (;;) {
     const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
     if (error) throw new Error(`auth.admin.listUsers failed: ${error.message}`);
     const users = data?.users ?? [];
     for (const u of users) {
       if ((u.email ?? '').toLowerCase() === email) {
-        matches.push({
-          id: u.id,
-          email: u.email ?? null,
-          createdAt: u.created_at ?? '',
-          identities: (u.identities ?? []).map((i) => ({
-            provider: i.provider,
-            identityId: i.identity_id ?? i.id ?? '',
-            createdAt: i.created_at ?? undefined,
-          })),
-          userMetadata: (u.user_metadata as Record<string, unknown>) ?? {},
-        });
+        candidateIds.push(u.id);
       }
     }
     if (users.length < perPage) break;
     page += 1;
     if (page > 50) break; // safety stop — 10k users
+  }
+
+  for (const id of candidateIds) {
+    const { data, error } = await supabase.auth.admin.getUserById(id);
+    if (error || !data?.user) {
+      throw new Error(`auth.admin.getUserById(${id}) failed: ${error?.message ?? 'no user returned'}`);
+    }
+    const u = data.user;
+    matches.push({
+      id: u.id,
+      email: u.email ?? null,
+      createdAt: u.created_at ?? '',
+      identities: (u.identities ?? []).map((i) => ({
+        provider: i.provider,
+        identityId: i.identity_id ?? i.id ?? '',
+        createdAt: i.created_at ?? undefined,
+      })),
+      userMetadata: (u.user_metadata as Record<string, unknown>) ?? {},
+    });
   }
   return matches;
 }

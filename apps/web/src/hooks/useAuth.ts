@@ -222,12 +222,74 @@ export function useAuth(): UseAuthReturn {
   }, [supabase, fetchProfile]);
 
   const signInWithGoogle = useCallback(async () => {
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(window.location.pathname)}`;
-    const { error } = await supabase.auth.signInWithOAuth({
+    // Popup-based flow that mirrors legacy Firebase signInWithPopup:
+    //   1. Ask Supabase for the OAuth URL (skipBrowserRedirect=true so it
+    //      doesn't navigate the parent tab).
+    //   2. Open the URL in a small popup window.
+    //   3. The popup completes Google OAuth → /auth/callback?popup=1
+    //      exchanges the code for a session (server-side cookies set) and
+    //      responds with an HTML page that postMessages the parent and
+    //      closes itself.
+    //   4. We listen for that postMessage, then refresh the supabase
+    //      session so onAuthStateChange fires with the new user.
+    const next = window.location.pathname || '/';
+    const redirectTo = `${window.location.origin}/auth/callback?popup=1&next=${encodeURIComponent(next)}`;
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo },
+      options: { skipBrowserRedirect: true, redirectTo },
     });
     if (error) throw error;
+    if (!data?.url) throw new Error('Sign-in failed: provider URL missing');
+
+    const popup = window.open(
+      data.url,
+      'tela_oauth',
+      'width=520,height=720,resizable=yes,scrollbars=yes,status=no,toolbar=no,menubar=no',
+    );
+    if (!popup) {
+      throw new Error('Popup blocked — please allow popups for this site and try again');
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        window.removeEventListener('message', handler);
+        clearInterval(closeWatcher);
+      };
+      const handler = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        const payload = event.data;
+        if (
+          typeof payload !== 'object' ||
+          payload === null ||
+          (payload as { __tela_oauth?: unknown }).__tela_oauth !== true
+        ) {
+          return;
+        }
+        cleanup();
+        const { status, message } = payload as { status: 'ok' | 'error'; message?: string };
+        if (status === 'ok') {
+          resolve();
+        } else {
+          reject(new Error(message || 'Sign-in failed'));
+        }
+      };
+      window.addEventListener('message', handler);
+
+      // Detect popup-closed (user dismissed the window before completing).
+      const closeWatcher = setInterval(() => {
+        if (popup.closed) {
+          cleanup();
+          reject(new Error('Sign-in cancelled'));
+        }
+      }, 500);
+    });
+
+    // The callback route already set the session cookies server-side.
+    // refreshSession() forces our in-memory client to re-read state and
+    // fires onAuthStateChange so the surrounding effect picks up the
+    // new user + profile.
+    await supabase.auth.refreshSession();
   }, [supabase]);
 
   const signInWithEmail = useCallback(

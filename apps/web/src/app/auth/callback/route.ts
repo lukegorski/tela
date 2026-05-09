@@ -70,14 +70,29 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await getSupabaseServerClient();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
     return errorRedirect(error.message);
   }
 
   if (isPopup) {
-    return popupResponse('ok', { next });
+    // Pass the session tokens to the parent window via postMessage so it
+    // can call supabase.auth.setSession() directly. Cookie-only sync from
+    // popup → parent is unreliable: the parent's @supabase/ssr browser
+    // client maintains its own in-memory state and doesn't fire
+    // onAuthStateChange when cookies change externally. Without the
+    // tokens, the parent's tRPC client has no Authorization header to
+    // attach and the API rejects with "Authentication required".
+    //
+    // Same-origin guarantees keep this safe: the popup HTML's postMessage
+    // call targets window.location.origin, and the parent enforces the
+    // same origin check on receipt. Tokens never leave the domain.
+    return popupResponse('ok', {
+      next,
+      access_token: data.session?.access_token ?? '',
+      refresh_token: data.session?.refresh_token ?? '',
+    });
   }
   return NextResponse.redirect(new URL(next, request.url));
 }

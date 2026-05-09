@@ -237,59 +237,103 @@ export function useAuth(): UseAuthReturn {
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { skipBrowserRedirect: true, redirectTo },
+      options: {
+        skipBrowserRedirect: true,
+        redirectTo,
+        // `prompt=select_account` forces Google to show the account picker
+        // every time instead of silently auto-selecting the last-used
+        // session. Without this, users with multiple Google accounts in
+        // the browser get logged in as whichever Google last wrote to a
+        // session cookie, which is rarely what they want — especially
+        // confusing when an old test account auto-selects over the
+        // primary one. Matches legacy Firebase Auth's effective default.
+        queryParams: { prompt: 'select_account' },
+      },
     });
     if (error) throw error;
     if (!data?.url) throw new Error('Sign-in failed: provider URL missing');
 
+    // Center the popup on the current browser window (multi-monitor friendly,
+    // matches user expectation that the popup appears over their active
+    // window). Without explicit left/top, browsers default to the top-left
+    // corner of the screen — visually messy and unlike legacy Firebase
+    // signInWithPopup, which centers via similar math internally.
+    const popupWidth = 520;
+    const popupHeight = 720;
+    const popupLeft = window.screenX + Math.max(0, (window.outerWidth - popupWidth) / 2);
+    const popupTop = window.screenY + Math.max(0, (window.outerHeight - popupHeight) / 2);
+
     const popup = window.open(
       data.url,
       'tela_oauth',
-      'width=520,height=720,resizable=yes,scrollbars=yes,status=no,toolbar=no,menubar=no',
+      `width=${popupWidth},height=${popupHeight},left=${Math.floor(popupLeft)},top=${Math.floor(popupTop)},resizable=yes,scrollbars=yes,status=no,toolbar=no,menubar=no`,
     );
     if (!popup) {
       throw new Error('Popup blocked — please allow popups for this site and try again');
     }
 
-    await new Promise<void>((resolve, reject) => {
-      const cleanup = () => {
-        window.removeEventListener('message', handler);
-        clearInterval(closeWatcher);
-      };
-      const handler = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
-        const payload = event.data;
-        if (
-          typeof payload !== 'object' ||
-          payload === null ||
-          (payload as { __tela_oauth?: unknown }).__tela_oauth !== true
-        ) {
-          return;
-        }
-        cleanup();
-        const { status, message } = payload as { status: 'ok' | 'error'; message?: string };
-        if (status === 'ok') {
-          resolve();
-        } else {
-          reject(new Error(message || 'Sign-in failed'));
-        }
-      };
-      window.addEventListener('message', handler);
+    interface OAuthOkPayload {
+      __tela_oauth: true;
+      status: 'ok';
+      next?: string;
+      access_token?: string;
+      refresh_token?: string;
+    }
+    interface OAuthErrorPayload {
+      __tela_oauth: true;
+      status: 'error';
+      message?: string;
+    }
+    type OAuthPayload = OAuthOkPayload | OAuthErrorPayload;
 
-      // Detect popup-closed (user dismissed the window before completing).
-      const closeWatcher = setInterval(() => {
-        if (popup.closed) {
+    const tokens = await new Promise<{ access_token: string; refresh_token: string }>(
+      (resolve, reject) => {
+        const cleanup = () => {
+          window.removeEventListener('message', handler);
+          clearInterval(closeWatcher);
+        };
+        const handler = (event: MessageEvent) => {
+          if (event.origin !== window.location.origin) return;
+          const payload = event.data;
+          if (
+            typeof payload !== 'object' ||
+            payload === null ||
+            (payload as { __tela_oauth?: unknown }).__tela_oauth !== true
+          ) {
+            return;
+          }
+          const data = payload as OAuthPayload;
           cleanup();
-          reject(new Error('Sign-in cancelled'));
-        }
-      }, 500);
-    });
+          if (data.status === 'ok') {
+            if (!data.access_token || !data.refresh_token) {
+              reject(new Error('Sign-in succeeded server-side but no tokens were returned'));
+              return;
+            }
+            resolve({ access_token: data.access_token, refresh_token: data.refresh_token });
+          } else {
+            reject(new Error(data.message || 'Sign-in failed'));
+          }
+        };
+        window.addEventListener('message', handler);
 
-    // The callback route already set the session cookies server-side.
-    // refreshSession() forces our in-memory client to re-read state and
-    // fires onAuthStateChange so the surrounding effect picks up the
-    // new user + profile.
-    await supabase.auth.refreshSession();
+        // Detect popup-closed (user dismissed the window before completing).
+        const closeWatcher = setInterval(() => {
+          if (popup.closed) {
+            cleanup();
+            reject(new Error('Sign-in cancelled'));
+          }
+        }, 500);
+      },
+    );
+
+    // setSession() directly installs the session in the parent's
+    // @supabase/ssr browser client and fires onAuthStateChange — the
+    // existing useAuth effect picks up the new user + profile from
+    // there. This is more reliable than refreshSession() because it
+    // doesn't depend on the cookie store sync between the popup's
+    // server-side handler and the parent's browser client.
+    const { error: setError } = await supabase.auth.setSession(tokens);
+    if (setError) throw setError;
   }, [supabase]);
 
   const signInWithEmail = useCallback(

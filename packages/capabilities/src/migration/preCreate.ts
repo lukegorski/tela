@@ -55,7 +55,8 @@ export type PreCreateAction =
   | 'inserted_app_user'
   | 'patched_auth_user_id'
   | 'set_onboarding_complete'
-  | 'set_try_on_settings';
+  | 'set_try_on_settings'
+  | 'set_avatar_url';
 
 export interface PreCreateOptions {
   /** If true, no writes — just inspect current state and report what would happen. */
@@ -216,6 +217,10 @@ export async function preCreateUser(
     if (existingApp.tryOnSettings == null) {
       patch.tryOnSettings = DEFAULT_TRY_ON_SETTINGS;
       actions.push('set_try_on_settings');
+    }
+    if (existingApp.avatarUrl == null && legacyPhotoUrl != null) {
+      patch.avatarUrl = legacyPhotoUrl;
+      actions.push('set_avatar_url');
     }
     if (Object.keys(patch).length > 0 && !dryRun) {
       patch.updatedAt = new Date();

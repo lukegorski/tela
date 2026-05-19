@@ -21,6 +21,22 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
           queries: {
             staleTime: 30_000,
             refetchOnWindowFocus: false,
+            // Single fetch attempt per query. With retries, a failing query
+            // (e.g., 401 during token refresh) holds `isPending=true` through
+            // the whole exponential-backoff sequence (~7s), so the spinner
+            // lingers and remounting the page re-runs the storm. With
+            // `retry: false` the error commits immediately, `isPending`
+            // flips false, and subsequent navigations render the cached
+            // state without the spinner flash. tRPC mutations don't retry
+            // by default, so this scope is queries only.
+            retry: false,
+            // Don't auto-refetch a previously errored query when the
+            // component remounts (e.g., nav back to the same page). Combined
+            // with `retry: false` and a 30s staleTime, this keeps empty/
+            // errored pages instant on revisit. The user can still force a
+            // refetch via an explicit invalidate (uploadItem, deleteItem,
+            // etc. already do this on success).
+            retryOnMount: false,
           },
         },
       }),

@@ -130,7 +130,13 @@ export async function preCreateUser(
   }
   const legacyUid = legacyAuthUser.uid;
   const legacyDisplayName = legacyAuthUser.displayName ?? null;
-  const legacyPhotoUrl = legacyAuthUser.photoURL ?? null;
+  // Defensive clamp: users.avatar_url is varchar(1024). Some Google profile
+  // photo URLs (long signed-token variants — see Isaac's account) blow past
+  // that. Null it out rather than failing the insert; the avatar will fall
+  // back to default UI and the user can update it later. Sentinel length
+  // matches the schema constraint exactly.
+  const rawPhotoUrl = legacyAuthUser.photoURL ?? null;
+  const legacyPhotoUrl = rawPhotoUrl && rawPhotoUrl.length <= 1024 ? rawPhotoUrl : null;
 
   // Read profile doc for additional fields (locale, body info, etc. — though
   // only locale is relevant at pre-create time; the full profile merge

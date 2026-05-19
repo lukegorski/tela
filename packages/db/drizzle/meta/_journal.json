@@ -99,6 +99,13 @@
       "when": 1777536466341,
       "tag": "0013_smooth_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1779178830000,
+      "tag": "0014_lumpy_sentry",
+      "breakpoints": true
     }
   ]
 }

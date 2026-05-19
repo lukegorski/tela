@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, check, boolean, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, check, boolean, jsonb } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 /**
@@ -67,7 +67,7 @@ export const users = pgTable(
     authUserId: uuid('auth_user_id').unique(),
     // Profile fields
     displayName: varchar('display_name', { length: 255 }),
-    avatarUrl: varchar('avatar_url', { length: 1024 }),
+    avatarUrl: text('avatar_url'),
     locale: varchar('locale', { length: 10 }).notNull().default('en'),
 
     // ─── Admin role (Phase 8.5) ───

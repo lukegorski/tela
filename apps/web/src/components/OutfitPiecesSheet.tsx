@@ -30,9 +30,14 @@ export default function OutfitPiecesSheet({
   onSave,
   onDelete,
 }: OutfitPiecesSheetProps) {
-  const { dict } = useDictionary();
+  const { dict, lang, translating } = useDictionary();
   const [confirming, setConfirming] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  // Translation skeleton — matches legacy OutfitPiecesSheet L35. Same
+  // pattern as OutfitCard: shimmer while translation is in flight on
+  // non-English locales. Currently inert (translation hook stubbed).
+  const tr = outfit.translations?.[lang];
+  const showSkeleton = translating && !tr && lang !== "en";
 
   return (
     <div className="pb-8 relative">
@@ -133,24 +138,32 @@ export default function OutfitPiecesSheet({
           {/* Outfit name */}
           {(outfit.name || outfit.occasion) && (
             <h4 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 uppercase tracking-widest">
-              {outfit.name || (dict.constants.occasionOptions[outfit.occasion as keyof typeof dict.constants.occasionOptions] ?? outfit.occasion)}
+              {tr?.name || outfit.name || (dict.constants.occasionOptions[outfit.occasion as keyof typeof dict.constants.occasionOptions] ?? outfit.occasion)}
             </h4>
           )}
         </div>
 
         {/* Reasoning */}
         {outfit.rationale && (
-          <div>
-            <p className={`text-sm text-neutral-500 dark:text-neutral-400 leading-relaxed${expanded ? "" : " line-clamp-2"}`}>
-              {outfit.rationale}
-            </p>
-            <button
-              onClick={() => setExpanded((v) => !v)}
-              className="text-xs font-medium text-neutral-300 dark:text-neutral-600 mt-1"
-            >
-              {expanded ? "less" : "more"}
-            </button>
-          </div>
+          showSkeleton ? (
+            <div className="space-y-2">
+              <div className="animate-pulse bg-stone-100 dark:bg-neutral-800 rounded h-4 w-full" />
+              <div className="animate-pulse bg-stone-100 dark:bg-neutral-800 rounded h-4 w-5/6" />
+              <div className="animate-pulse bg-stone-100 dark:bg-neutral-800 rounded h-4 w-2/3" />
+            </div>
+          ) : (
+            <div>
+              <p className={`text-sm text-neutral-500 dark:text-neutral-400 leading-relaxed${expanded ? "" : " line-clamp-2"}`}>
+                {tr?.rationale || outfit.rationale}
+              </p>
+              <button
+                onClick={() => setExpanded((v) => !v)}
+                className="text-xs font-medium text-neutral-300 dark:text-neutral-600 mt-1"
+              >
+                {expanded ? "less" : "more"}
+              </button>
+            </div>
+          )
         )}
 
         {/* Season tag */}

@@ -27,8 +27,15 @@ export default function OutfitCard({
   onSetFeedback,
   showDetail = false,
 }: OutfitCardProps) {
-  const { dict } = useDictionary();
+  const { dict, lang, translating } = useDictionary();
   const [confirming, setConfirming] = useState(false);
+  // Translation skeleton — matches legacy OutfitCard L23. Flashes a
+  // shimmer while the dictionary translation for a non-English locale is
+  // in flight. Today the translation hook is stubbed so `translating`
+  // never goes true, but the wiring stays in place so it Just Works
+  // when the hook lands.
+  const tr = outfit.translations?.[lang];
+  const showSkeleton = translating && !tr && lang !== "en";
 
   function setFeedback(feedback: "up" | "down") {
     const next = outfit.feedback === feedback ? null : feedback;
@@ -159,9 +166,16 @@ export default function OutfitCard({
             )}
           </div>
         </div>
-        <p className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
-          {outfit.rationale}
-        </p>
+        {showSkeleton ? (
+          <div className="space-y-2">
+            <div className="animate-pulse bg-stone-100 dark:bg-neutral-800 rounded h-4 w-full" />
+            <div className="animate-pulse bg-stone-100 dark:bg-neutral-800 rounded h-4 w-3/4" />
+          </div>
+        ) : (
+          <p className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
+            {tr?.rationale || outfit.rationale}
+          </p>
+        )}
         {/* See OutfitPiecesSheet for season-tag rationale (single tag, not multi). */}
         {outfit.season && (
           <div className="flex gap-1.5 mt-3">

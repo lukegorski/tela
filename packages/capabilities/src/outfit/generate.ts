@@ -13,7 +13,7 @@ import {
 import { call } from '@tela/ai';
 import { getPrompt } from '@tela/prompts';
 import { logEvent } from '@tela/events';
-import { registerCapability } from '../registry.js';
+import { executeCapability, registerCapability } from '../registry.js';
 import { getRequestContext } from '../context/requestContext.js';
 import { fetchRichOutfits, richOutfitSchema } from './outfitShape.js';
 
@@ -64,12 +64,29 @@ export const generateOutfits = registerCapability({
     });
     if (!ctx) throw new Error('Context not found or does not belong to user');
 
-    // ─── Load style profile ───
-    const profile = await db.query.styleProfiles.findFirst({
+    // ─── Load style profile (lazy-init via closetRead if missing) ───
+    // Migrated users from legacy don't have a style_profiles row (the
+    // migration script's "regenerates on first generate" promise was
+    // unwired). New users post-cutover also lack one until something
+    // explicitly runs profile.closetRead. We trigger it inline here so
+    // the FIRST outfit generation for any user transparently bootstraps
+    // the profile. Subsequent generations skip this branch (instant).
+    let profile = await db.query.styleProfiles.findFirst({
       where: eq(styleProfiles.userId, userId),
     });
     if (!profile) {
-      throw new Error('No style profile exists for this user. Run profile.closetRead first.');
+      await executeCapability('profile.closetRead', {
+        locale: 'en',
+        reason: 'lazy_init_from_outfit_generate',
+      });
+      profile = await db.query.styleProfiles.findFirst({
+        where: eq(styleProfiles.userId, userId),
+      });
+      if (!profile) {
+        throw new Error(
+          'profile.closetRead completed but no style_profiles row appeared. Investigate.',
+        );
+      }
     }
 
     // ─── Load wardrobe (filtered by season for relevance) ───

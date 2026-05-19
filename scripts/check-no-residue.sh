@@ -18,6 +18,7 @@
 # When a check fails, fix the source — DON'T loosen the check. The
 # allowlist of "architecturally new" routes is intentionally tiny:
 #   /api/trpc/*              — the tRPC router
+#   /api/health/*            — Railway deploy healthcheck (no DB / auth / SSR)
 #   /auth/callback/*         — Supabase OAuth callback
 #   /auth/sign-out/*         — sign-out POST handler
 #   /chat/stream/*           — SSE endpoint for streaming chat
@@ -122,8 +123,9 @@ else
 fi
 
 # --- Check 2: legacy /api/* mirroring routes ----------------------------------
-# Allowlist: /api/trpc, /api/auth/callback, /api/auth/sign-out, /api/chat/stream.
-# Anything else under apps/web/src/app/api/ is a legacy mirror.
+# Allowlist: /api/trpc, /api/health, /api/auth/callback, /api/auth/sign-out,
+# /api/chat/stream. Anything else under apps/web/src/app/api/ is a legacy
+# mirror.
 #
 # We list every route handler under apps/web/src/app/api/, strip the
 # allowlisted subtrees, and fail on whatever's left.
@@ -132,14 +134,14 @@ if [[ -d "${API_DIR}" ]]; then
   STRAY_API="$(find "${API_DIR}" \
       \( -name 'route.ts' -o -name 'route.tsx' -o -name 'route.js' -o -name 'route.mjs' \) \
       2>/dev/null \
-    | grep -Ev '^apps/web/src/app/api/(trpc|auth/callback|auth/sign-out|chat/stream)(/|$)' \
+    | grep -Ev '^apps/web/src/app/api/(trpc|health|auth/callback|auth/sign-out|chat/stream)(/|$)' \
     || true)"
   if [[ -n "${STRAY_API}" ]]; then
     fail "stray /api/* route handlers detected" \
-      "Only /api/trpc, /api/auth/callback, /api/auth/sign-out, and /api/chat/stream are allowed. Move data fetching to tRPC capabilities. See PORT.md → 'The golden no-residue rule'." \
+      "Only /api/trpc, /api/health, /api/auth/callback, /api/auth/sign-out, and /api/chat/stream are allowed. Move data fetching to tRPC capabilities. See PORT.md → 'The golden no-residue rule'." \
       "${STRAY_API}"
   else
-    pass "no stray /api/* routes (allowlist: /trpc, /auth/callback, /auth/sign-out, /chat/stream)"
+    pass "no stray /api/* routes (allowlist: /trpc, /health, /auth/callback, /auth/sign-out, /chat/stream)"
   fi
 else
   pass "no /api/ directory at all (clean)"

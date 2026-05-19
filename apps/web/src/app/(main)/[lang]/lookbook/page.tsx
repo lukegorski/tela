@@ -203,7 +203,7 @@ export default function LookbookPage() {
         </header>
 
         {loading ? (
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center sm:min-h-[calc(100dvh-8rem)]">
             <LoadingSpinner variant="auto" />
           </div>
         ) : filteredOutfits.length > 0 ? (
@@ -287,7 +287,7 @@ export default function LookbookPage() {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center px-6">
+          <div className="flex-1 flex flex-col items-center justify-center px-6 sm:min-h-[calc(100dvh-8rem)]">
             <p className="text-sm text-neutral-500 dark:text-neutral-400 leading-relaxed text-center">
               {outfits.length > 0 ? dict.outfits.noMatchFilters : dict.lookbook.noSavedOutfits}
             </p>

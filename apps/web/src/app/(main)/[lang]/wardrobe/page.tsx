@@ -555,13 +555,13 @@ export default function WardrobePage() {
             </div>
           </div>
         ) : items.length > 0 ? (
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center sm:min-h-[calc(100dvh-8rem)]">
             <p className="text-center text-neutral-400 dark:text-neutral-500 text-sm">
               {t(dict.wardrobe.noFilterResults, { filter: (dict.constants.categoryFilters[filter as keyof typeof dict.constants.categoryFilters] ?? filter).toLowerCase() })}
             </p>
           </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center px-6">
+          <div className="flex-1 flex items-center justify-center px-6 sm:min-h-[calc(100dvh-8rem)]">
             <p className="text-sm text-neutral-500 dark:text-neutral-400 leading-relaxed text-center">
               {dict.wardrobe.emptyPrompt}
               <br />

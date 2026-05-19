@@ -2,15 +2,24 @@
 
 import Image from "next/image";
 import BottomSheet from "@/components/BottomSheet";
-import { useWardrobe } from "@/hooks/useWardrobe";
 import { itemBgStyle } from "@/lib/styles";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import type { WardrobeItem } from "@/lib/types";
 
 interface ChatWardrobePickerProps {
   isOpen: boolean;
   onClose: () => void;
   selectedItemIds: string[];
   onToggle: (itemId: string) => void;
+  /** Wardrobe data passed from the parent — chat/page.tsx already
+   * subscribes to useWardrobe for thumbnails, so we share that one
+   * subscription instead of mounting our own. Without this, the
+   * unconditionally-rendered picker (BottomSheet hides via internal
+   * conditional return, but the component above it has already run
+   * its render + hook list) would double the wardrobe data
+   * subscription on the chat route. */
+  items: WardrobeItem[];
+  loading: boolean;
 }
 
 /**
@@ -25,8 +34,9 @@ export default function ChatWardrobePicker({
   onClose,
   selectedItemIds,
   onToggle,
+  items,
+  loading,
 }: ChatWardrobePickerProps) {
-  const { items, loading } = useWardrobe();
   const selectedCount = selectedItemIds.length;
 
   return (

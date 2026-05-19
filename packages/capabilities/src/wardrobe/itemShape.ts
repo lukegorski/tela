@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { eq, desc, and } from 'drizzle-orm';
 import { getDb, closetItems, itemPhotos } from '@tela/db';
 import { getSupabaseAdmin, ITEM_PHOTOS_BUCKET } from '../storage/supabase.js';
+import { getOrSignUrl } from '../storage/signedUrlCache.js';
 
 const SIGNED_URL_TTL_SECONDS = 600;
 
@@ -155,11 +156,11 @@ export async function fetchRichItems(opts: {
     rows.map(async (row): Promise<RichItem> => {
       const displayPath = row.enhancedStoragePath ?? row.originalStoragePath;
 
-      const [displaySigned, originalSigned] = await Promise.all([
-        supabase.storage.from(ITEM_PHOTOS_BUCKET).createSignedUrl(displayPath, SIGNED_URL_TTL_SECONDS),
+      const [displayUrl, originalUrl] = await Promise.all([
+        getOrSignUrl(supabase, ITEM_PHOTOS_BUCKET, displayPath, SIGNED_URL_TTL_SECONDS),
         row.enhancedStoragePath
-          ? supabase.storage.from(ITEM_PHOTOS_BUCKET).createSignedUrl(row.originalStoragePath, SIGNED_URL_TTL_SECONDS)
-          : Promise.resolve({ data: { signedUrl: null }, error: null } as const),
+          ? getOrSignUrl(supabase, ITEM_PHOTOS_BUCKET, row.originalStoragePath, SIGNED_URL_TTL_SECONDS)
+          : Promise.resolve(null),
       ]);
 
       const enhancementStartedAt =
@@ -194,8 +195,8 @@ export async function fetchRichItems(opts: {
         enhancementStartedAt,
         enhancedAt: row.enhancedAt?.toISOString() ?? null,
         backgroundColor: row.closetItemBackgroundColor ?? row.photoBackgroundColor,
-        imageUrl: displaySigned.data?.signedUrl ?? null,
-        originalImageUrl: originalSigned.data?.signedUrl ?? displaySigned.data?.signedUrl ?? null,
+        imageUrl: displayUrl,
+        originalImageUrl: originalUrl ?? displayUrl,
       };
     }),
   );

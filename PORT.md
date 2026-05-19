@@ -620,6 +620,46 @@ them to Luke before starting D.7.
     - Only parallel-txn workloads fail
     - DATABASE_URL contains `:6543` or `pooler.supabase.com`
 
+15. **`useMutation` for reads doesn't dedupe — use `useQuery` with a
+    stable queryKey.** Surfaced when the Railway API OOM'd post-
+    migration. React Query's `useMutation` is a fire-and-track wrapper:
+    each consumer that calls `mutateAsync` runs its own request, no
+    cache, no in-flight dedup. So N components that each instantiate
+    `useWardrobe`/`useOutfits` (legacy pattern from D.6/D.7b) fan out
+    to N parallel `wardrobe.listItems`/`outfit.list` calls — each one
+    runs `fetchRichItems`/`fetchRichOutfits` end-to-end, including the
+    O(items×2) `createSignedUrl` fanout per request. Marina's 59-item
+    closet × 3 simultaneous consumers (wardrobe, outfits, chat pages
+    all mounted at once via prefetch) × ~13s per call → memory + pool
+    pressure → Railway SIGKILL.
+
+    The right shape for a *read*: `useQuery({ queryKey, queryFn })`.
+    React Query's cache dedupes by `queryKey` — the first request
+    fires, all other consumers with the same key share that promise
+    and hydrate from the cache when it settles. queryKey MUST include
+    `userId` so caches don't leak across users; use `enabled: !!userId`
+    so we don't fetch while signed out; `staleTime: 30_000` (matches
+    the global default in `apps/web/src/trpc/Provider.tsx`).
+
+    Wrinkle: our `capability.execute` server-side procedure is defined
+    as a tRPC `.mutation`, so `trpc.capability.execute.useQuery` doesn't
+    exist as a typed hook. The workaround in `useWardrobe.ts` /
+    `useOutfits.ts` is to import `useQuery` from `@tanstack/react-query`
+    directly and call the vanilla client (`trpc.useUtils().client.
+    capability.execute.mutate(...)`) inside `queryFn`. tRPC's runtime
+    doesn't care about query/mutation distinction — only the typed hook
+    API does — so dedup works correctly.
+
+    Mutations (`outfit.save`, `outfit.delete`, `wardrobe.removeItem`,
+    `tryon.generate`, etc.) stay as `useMutation`. Optimistic updates
+    move from `setState`-style local arrays to
+    `queryClient.cancelQueries` + `setQueryData` + `invalidateQueries`
+    on settle. Recursive setTimeout polling becomes
+    `refetchInterval: (q) => hasActive(q.state.data) ? 2500 : false`.
+
+    Reference commit: (see git log — `useQuery` refactor + server-side
+    signed-URL cache).
+
 ---
 
 ## Hardened session-start prompt

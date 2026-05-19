@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback, useMemo } from "react";
+import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { trpc } from "@/trpc/client";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuthContext } from "@/components/AuthProvider";
@@ -8,6 +9,7 @@ import { useDictionary } from "@/components/DictionaryProvider";
 import type { WardrobeItem } from "@/lib/types";
 
 const POLL_INTERVAL_MS = 5000;
+const STALE_TIME_MS = 30_000;
 const ENHANCING_STATUSES = new Set(["pending", "processing"]);
 
 const SUPPORTED_MIME_TYPES = [
@@ -43,17 +45,29 @@ function inferMimeType(file: File): string {
   }
 }
 
+type ListItemsResult = { items: WardrobeItem[]; total: number };
+
+const LIST_INPUT = { limit: 200, offset: 0 } as const;
+
+function wardrobeQueryKey(userId: string | null): QueryKey {
+  return ["capability", "wardrobe.listItems", userId, LIST_INPUT] as const;
+}
+
 /**
  * Wardrobe data hook. Public shape mirrors the legacy hook so the page
  * port stays byte-for-byte. Internally it talks to our tRPC capabilities
  * instead of Firestore.
  *
- * Reads: `wardrobe.listItems` mutation, called on mount, after upload,
- * after delete, and on a 5s poll while any item is pending/processing
- * (substitutes for Firestore's onSnapshot).
+ * Reads use React Query so N parallel consumers (wardrobe page, outfits
+ * page, lookbook, chat page, ChatWardrobePicker) dedupe to one network
+ * request keyed by userId. See PORT.md pitfall #15.
+ *
+ * Polling: while any item is pending/processing enhancement, refetch
+ * every 5s (substitutes for Firestore's onSnapshot). `refetchInterval`
+ * receives the current cache and returns false once nothing's active.
  *
  * Uploads: 5-step pipeline (request signed URL → Supabase Storage upload
- * → confirm → AI analyze → addItem).
+ * → confirm → AI analyze → addItem). Invalidates the list on success.
  *
  * Deletes: `wardrobe.removeItem` capability. The capability cascades to
  * any outfits that reference the item; storage cleanup is deferred.
@@ -61,8 +75,6 @@ function inferMimeType(file: File): string {
 export function useWardrobe() {
   const { user } = useAuthContext();
   const { lang } = useDictionary();
-  const [items, setItems] = useState<WardrobeItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
   // Stable string id — `user` itself is recreated on every render by
@@ -70,68 +82,40 @@ export function useWardrobe() {
   // reference would churn this hook's effects on every parent render.
   const userId = user?.id ?? null;
 
-  const execute = trpc.capability.execute.useMutation();
-  const executeRef = useRef(execute);
-  executeRef.current = execute;
+  const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
+  const queryKey = useMemo(() => wardrobeQueryKey(userId), [userId]);
 
-  // Stable refetch — depends only on the stable userId string.
-  const refetch = useCallback(async () => {
-    if (!userId) {
-      setItems([]);
-      setLoading(false);
-      return;
-    }
-    try {
-      const result = (await executeRef.current.mutateAsync({
+  const query = useQuery<ListItemsResult>({
+    queryKey,
+    enabled: !!userId,
+    staleTime: STALE_TIME_MS,
+    queryFn: async () => {
+      const result = (await utils.client.capability.execute.mutate({
         name: "wardrobe.listItems",
-        input: { limit: 200, offset: 0 },
-      })) as { items: WardrobeItem[]; total: number };
-      setItems(result.items);
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
+        input: LIST_INPUT,
+      })) as ListItemsResult;
+      return result;
+    },
+    refetchInterval: (q) => {
+      const items = q.state.data?.items ?? [];
+      const stillEnhancing = items.some(
+        (it) =>
+          it.enhancementStatus !== null &&
+          ENHANCING_STATUSES.has(it.enhancementStatus),
+      );
+      return stillEnhancing ? POLL_INTERVAL_MS : false;
+    },
+  });
 
-  // Initial load + poll while any item is enhancing.
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
+  const items: WardrobeItem[] = query.data?.items ?? [];
+  // `isPending` is true while disabled (no userId) — so guard on userId.
+  const loading = !!userId && query.isPending;
 
-    async function tick() {
-      if (cancelled) return;
-      await refetch();
-      if (cancelled) return;
-      // Read latest items via callback to avoid closure on stale state.
-      setItems((latest) => {
-        const stillEnhancing = latest.some(
-          (it) => it.enhancementStatus !== null && ENHANCING_STATUSES.has(it.enhancementStatus),
-        );
-        if (stillEnhancing) {
-          timer = setTimeout(tick, POLL_INTERVAL_MS);
-        }
-        return latest;
-      });
-    }
-
-    if (userId) {
-      setLoading(true);
-      // Catch errors locally so a transient 401 (e.g. while the auth token
-      // is mid-refresh) doesn't bubble up as an unhandled promise rejection,
-      // which would trip Next.js's dev error overlay. The error is already
-      // captured into refetch's `setError` for the UI to surface.
-      tick().catch(() => {
-        if (!cancelled) setLoading(false);
-      });
-    } else {
-      setItems([]);
-      setLoading(false);
-    }
-
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [userId, refetch]);
+  // Pitfall #11: tRPC's `useMutation().execute` is unstable across renders.
+  // We don't put it in any effect deps below — `uploadItem`/`deleteItem`
+  // are event handlers — so this is just a convenience holder.
+  const execute = trpc.capability.execute.useMutation();
 
   const uploadItem = useCallback(
     async (file: File) => {
@@ -150,7 +134,7 @@ export function useWardrobe() {
       setUploading(true);
       try {
         // 1. Request signed upload URL
-        const upload = (await executeRef.current.mutateAsync({
+        const upload = (await execute.mutateAsync({
           name: "wardrobe.requestPhotoUpload",
           input: { filename: file.name, mimeType },
         })) as { uploadUrl: string; storagePath: string; token: string };
@@ -165,13 +149,13 @@ export function useWardrobe() {
         if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
 
         // 3. Confirm (creates item_photos row + enqueues enhancement)
-        const confirmed = (await executeRef.current.mutateAsync({
+        const confirmed = (await execute.mutateAsync({
           name: "wardrobe.confirmPhotoUpload",
           input: { storagePath: upload.storagePath },
         })) as { photoId: string };
 
         // 4. Analyze with AI
-        const analysis = (await executeRef.current.mutateAsync({
+        const analysis = (await execute.mutateAsync({
           name: "item.analyze",
           input: { photoId: confirmed.photoId, locale: lang },
         })) as {
@@ -179,7 +163,7 @@ export function useWardrobe() {
         };
 
         // 5. Save to closet
-        await executeRef.current.mutateAsync({
+        await execute.mutateAsync({
           name: "wardrobe.addItem",
           input: {
             photoId: confirmed.photoId,
@@ -187,24 +171,44 @@ export function useWardrobe() {
           },
         });
 
-        await refetch();
+        await queryClient.invalidateQueries({ queryKey });
       } finally {
         setUploading(false);
       }
     },
-    [userId, lang, refetch],
+    [userId, lang, execute, queryClient, queryKey],
   );
 
   const deleteItem = useCallback(
     async (item: WardrobeItem) => {
       if (!userId) return;
-      await executeRef.current.mutateAsync({
-        name: "wardrobe.removeItem",
-        input: { itemId: item.id },
-      });
-      await refetch();
+
+      // Optimistic remove — the cell disappears immediately, rolls back on error.
+      await queryClient.cancelQueries({ queryKey });
+      const prev = queryClient.getQueryData<ListItemsResult>(queryKey);
+      queryClient.setQueryData<ListItemsResult>(queryKey, (old) =>
+        old
+          ? { ...old, items: old.items.filter((i) => i.id !== item.id) }
+          : old,
+      );
+      try {
+        await execute.mutateAsync({
+          name: "wardrobe.removeItem",
+          input: { itemId: item.id },
+        });
+        // Outfit cascade — invalidate that cache too so outfit lists drop
+        // any rows that referenced this item.
+        await queryClient.invalidateQueries({
+          queryKey: ["capability", "outfit.list"],
+        });
+      } catch (err) {
+        if (prev) queryClient.setQueryData(queryKey, prev);
+        throw err;
+      } finally {
+        await queryClient.invalidateQueries({ queryKey });
+      }
     },
-    [userId, refetch],
+    [userId, execute, queryClient, queryKey],
   );
 
   return { items, loading, uploading, uploadItem, deleteItem };

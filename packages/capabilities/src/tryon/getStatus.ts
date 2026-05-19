@@ -4,6 +4,7 @@ import { getDb, tryOnJobs } from '@tela/db';
 import { registerCapability } from '../registry.js';
 import { getRequestContext } from '../context/requestContext.js';
 import { getSupabaseAdmin, TRY_ON_BUCKET } from '../storage/supabase.js';
+import { getOrSignUrl } from '../storage/signedUrlCache.js';
 
 const input = z.object({
   jobId: z.string().uuid().optional(),
@@ -74,10 +75,12 @@ export const getTryOnStatus = registerCapability({
     let resultUrl: string | null = null;
     if (job.status === 'complete' && job.resultStoragePath) {
       const supabase = getSupabaseAdmin();
-      const { data, error } = await supabase.storage
-        .from(TRY_ON_BUCKET)
-        .createSignedUrl(job.resultStoragePath, 3600);
-      if (!error && data) resultUrl = data.signedUrl;
+      resultUrl = await getOrSignUrl(
+        supabase,
+        TRY_ON_BUCKET,
+        job.resultStoragePath,
+        3600,
+      );
     }
 
     return {

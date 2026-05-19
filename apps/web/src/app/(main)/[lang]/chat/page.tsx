@@ -271,7 +271,7 @@ function ChatPageContent() {
     hasMore,
   } = useChat();
 
-  const { items: wardrobeItems } = useWardrobe();
+  const { items: wardrobeItems, loading: wardrobeLoading } = useWardrobe();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -575,6 +575,8 @@ function ChatPageContent() {
         isOpen={pickerOpen}
         onClose={() => setPickerOpen(false)}
         selectedItemIds={selectedItemIds}
+        items={wardrobeItems}
+        loading={wardrobeLoading}
         onToggle={(itemId) => {
           setSelectedItemIds((prev) =>
             prev.includes(itemId)

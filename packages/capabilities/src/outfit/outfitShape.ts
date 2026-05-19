@@ -16,6 +16,7 @@ import {
   ITEM_PHOTOS_BUCKET,
   TRY_ON_BUCKET,
 } from '../storage/supabase.js';
+import { getOrSignUrl } from '../storage/signedUrlCache.js';
 
 const SIGNED_URL_TTL_SECONDS = 600;
 
@@ -237,15 +238,11 @@ export async function fetchRichOutfits(opts: {
   const signedItemUrls = await Promise.all(
     itemRows.map(async (row) => {
       const displayPath = row.enhancedStoragePath ?? row.originalStoragePath;
-      const [displaySigned, originalSigned] = await Promise.all([
-        supabase.storage
-          .from(ITEM_PHOTOS_BUCKET)
-          .createSignedUrl(displayPath, SIGNED_URL_TTL_SECONDS),
+      const [displayUrl, originalUrl] = await Promise.all([
+        getOrSignUrl(supabase, ITEM_PHOTOS_BUCKET, displayPath, SIGNED_URL_TTL_SECONDS),
         row.enhancedStoragePath
-          ? supabase.storage
-              .from(ITEM_PHOTOS_BUCKET)
-              .createSignedUrl(row.originalStoragePath, SIGNED_URL_TTL_SECONDS)
-          : Promise.resolve({ data: { signedUrl: null }, error: null } as const),
+          ? getOrSignUrl(supabase, ITEM_PHOTOS_BUCKET, row.originalStoragePath, SIGNED_URL_TTL_SECONDS)
+          : Promise.resolve(null),
       ]);
       return {
         outfitId: row.outfitId,
@@ -257,9 +254,8 @@ export async function fetchRichOutfits(opts: {
           primaryColor: row.primaryColor,
           secondaryColor: row.secondaryColor,
           backgroundColor: row.closetItemBackgroundColor ?? row.photoBackgroundColor,
-          imageUrl: displaySigned.data?.signedUrl ?? null,
-          originalImageUrl:
-            originalSigned.data?.signedUrl ?? displaySigned.data?.signedUrl ?? null,
+          imageUrl: displayUrl,
+          originalImageUrl: originalUrl ?? displayUrl,
         } satisfies RichOutfitItem,
       };
     }),
@@ -277,10 +273,12 @@ export async function fetchRichOutfits(opts: {
     Array.from(latestTryOnByOutfit.entries()).map(async ([outfitId, row]) => {
       let resultUrl: string | null = null;
       if (row.status === 'complete' && row.resultStoragePath) {
-        const { data } = await supabase.storage
-          .from(TRY_ON_BUCKET)
-          .createSignedUrl(row.resultStoragePath, SIGNED_URL_TTL_SECONDS);
-        resultUrl = data?.signedUrl ?? null;
+        resultUrl = await getOrSignUrl(
+          supabase,
+          TRY_ON_BUCKET,
+          row.resultStoragePath,
+          SIGNED_URL_TTL_SECONDS,
+        );
       }
       signedTryOns.set(outfitId, {
         jobId: row.id,

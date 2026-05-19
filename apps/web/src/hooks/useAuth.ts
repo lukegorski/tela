@@ -235,7 +235,13 @@ export function useAuth(): UseAuthReturn {
     // `prompt=select_account` is preserved from the popup attempt: it
     // forces Google to show the account picker instead of silently
     // auto-selecting the most-recently-used session.
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(window.location.pathname)}`;
+    // Bare redirectTo (no query string) so it exact-matches the Supabase
+    // Redirect URLs allowlist. With ?next=… appended, Supabase couldn't
+    // find a match and silently fell back to Site URL (localhost:3000),
+    // dropping users onto a dead page post-OAuth. Preserving "return to
+    // where I was after sign-in" is deferred — track as a polish ticket
+    // (state param or sessionStorage hand-off across the redirect hop).
+    const redirectTo = `${window.location.origin}/auth/callback`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {

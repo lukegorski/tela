@@ -140,7 +140,7 @@ export function useOutfits(opts?: { savedOnly?: boolean }) {
       try {
         const ctx = (await execute.mutateAsync({
           name: "context.assemble",
-          input: { occasion: occasion ?? "Everyday" },
+          input: { occasion: (occasion ?? "Everyday").toLowerCase().replace(/ /g, "_") },
         })) as { contextId: string };
 
         const generated = (await execute.mutateAsync({

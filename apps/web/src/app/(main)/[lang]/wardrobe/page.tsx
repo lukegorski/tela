@@ -509,8 +509,8 @@ export default function WardrobePage() {
 
         {/* Scrollable content area */}
         {loading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <LoadingSpinner />
+          <div className="flex-1 flex items-center justify-center sm:min-h-[calc(100dvh-8rem)]">
+            <LoadingSpinner variant="auto" />
           </div>
         ) : groupedItems.length > 0 ? (
           <div ref={scrollContainerRef} className="flex-1 overflow-y-auto min-h-0">

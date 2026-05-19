@@ -20,11 +20,15 @@
  * PKCE `/auth/callback` route). Only reachable when an admin tool
  * (Phase 11 magic-link verification) explicitly targets it as redirectTo.
  */
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
-export default function MagicCallbackPage() {
+// useSearchParams() forces the consuming subtree to client-side render, so
+// Next.js requires a Suspense boundary above it — otherwise the build-time
+// prerender bails. Splitting the body keeps the page route render-ready
+// without changing behavior.
+function MagicCallbackInner() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<'pending' | 'error'>('pending');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -92,5 +96,19 @@ export default function MagicCallbackPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function MagicCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center">
+          <div className="text-sm text-gray-500">Signing you in…</div>
+        </div>
+      }
+    >
+      <MagicCallbackInner />
+    </Suspense>
   );
 }

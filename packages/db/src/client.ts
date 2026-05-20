@@ -37,6 +37,22 @@ export function getDb() {
   return _db;
 }
 
+/**
+ * Get the underlying postgres-js client. Shares the same pool as getDb() —
+ * either call initializes the single pool, so both inherit the pgbouncer
+ * `prepare: false` fix (PORT.md pitfall #14).
+ *
+ * Use this when raw postgres-js tagged-template typing
+ * (e.g., `sql<{ id: string }[]>\`SELECT id FROM users\``) is cleaner than
+ * Drizzle's query builder — primarily for admin read-side aggregates that
+ * benefit from inline result typing.
+ */
+export function getSql() {
+  if (_sql) return _sql;
+  getDb();
+  return _sql!;
+}
+
 export type Database = ReturnType<typeof getDb>;
 
 /**

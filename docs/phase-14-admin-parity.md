@@ -426,6 +426,26 @@ backend (`/api/admin/ai/chat/route.ts`):
    admin tools). Admin chat sees all 17 admin capabilities
    automatically.
 
+10. **Path A (RSC + DB-direct via @tela/db) — locked for 14a-14c.**
+    apps/admin pages are RSC and read Postgres directly via lib
+    helpers in `apps/admin/src/lib/admin-*.ts`. Helpers import
+    `getSql` (raw postgres-js tagged template) or `getDb` (Drizzle)
+    from `@tela/db` — never create a local `postgres()` client or
+    module-local `_sql` state, since that would skip the pgbouncer
+    `prepare: false` fix (PORT.md pitfall #14). Writes (form
+    submits, mutations) still go through tRPC capabilities so the
+    `requiresAdmin` gate / audit log / observability hooks fire.
+    **Don't mix patterns in 14b/14c**: new admin pages stay RSC +
+    DB-direct for reads. A hybrid where some pages fetch via
+    `useQuery` and others via lib helpers is worse than either pure
+    path. Env-var allowlist for apps/admin: `NEXT_PUBLIC_SUPABASE_URL`,
+    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_API_URL`,
+    `DATABASE_URL`, `NODE_ENV=production`. **Excluded**:
+    `SUPABASE_SERVICE_ROLE_KEY`, `FIREBASE_ADMIN_*`,
+    `SERVICE_ACCOUNT_SECRET`, `SENTRY_DSN`. If admin ever needs a
+    Supabase admin-API operation, route it through an apps/api
+    capability rather than pulling the service-role key into admin.
+
 ---
 
 ## D.14c — AdminAiChat surface + DNS cut
@@ -883,6 +903,16 @@ NOT in 14b (deferred to 14c):
 EXECUTION RULES:
 ══════════════════════════════════════════════════════════
 
+- PATH A CONTINUITY (locked in 14a, applies here): admin pages are
+  RSC and read DB directly via lib helpers in apps/admin/src/lib/.
+  New 14b lib helpers (e.g., admin-activity.ts, admin-user-detail.ts)
+  import getSql / getDb from @tela/db — never create a local
+  postgres() client. The 5 new admin.* capabilities below are for
+  WRITES (and external/MCP/AdminAiChat consumers); admin pages
+  themselves continue to read via lib helpers. Don't introduce
+  tRPC useQuery for reads in admin pages — that creates a hybrid
+  worse than either pure path. See "Path A locked" item #10 in the
+  architectural decisions section.
 - All 5 new capabilities go in packages/capabilities/src/admin/
   with requiresAdmin: true. Reuse fetchRichItems / fetchRichOutfits
   from wardrobe/itemShape.ts + outfit/outfitShape.ts (with userId
@@ -993,6 +1023,10 @@ DNS CUT (last step):
 EXECUTION RULES:
 ══════════════════════════════════════════════════════════
 
+- PATH A CONTINUITY (locked in 14a): admin pages continue to be
+  RSC + DB-direct via lib helpers; only AdminAiChat surface itself
+  is naturally CSR (it streams). Any new admin lib helpers import
+  getSql / getDb from @tela/db. See architectural decisions item #10.
 - Schema 0014: edit packages/db/src/schema/stubs.ts (chat tables
   live there) → db:generate → INSPECT SQL → db:migrate → rebuild.
 - admin.streamChatTurn lives in packages/capabilities/src/admin/

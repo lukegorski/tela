@@ -39,12 +39,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
-WEB_SRC="apps/web/src"
+# Apps to scan. apps/admin was added in Phase 14a as a separate Next service
+# (RSC + DB-direct via @tela/db, per architectural decision #10 in
+# docs/phase-14-admin-parity.md). The no-residue invariant applies to both.
+SCAN_DIRS=("apps/web/src" "apps/admin/src")
 
-if [[ ! -d "${WEB_SRC}" ]]; then
-  echo "check-no-residue: ${WEB_SRC} not found — run from repo root" >&2
-  exit 2
-fi
+# Default scan target — most checks below run once against this single dir,
+# but a few (the /api/* allowlist + the multi-dir greps) iterate SCAN_DIRS.
+WEB_SRC="${SCAN_DIRS[0]}"
+
+for dir in "${SCAN_DIRS[@]}"; do
+  if [[ ! -d "${dir}" ]]; then
+    echo "check-no-residue: ${dir} not found — run from repo root" >&2
+    exit 2
+  fi
+done
 
 # --- collect failures, report at end ------------------------------------------
 FAILURES=0
@@ -76,7 +85,7 @@ grep_web() {
     --include='*.ts' --include='*.tsx' \
     --include='*.js' --include='*.jsx' \
     --include='*.mjs' --include='*.cjs' \
-    "${WEB_SRC}" 2>/dev/null \
+    "${SCAN_DIRS[@]}" 2>/dev/null \
     | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*(\*|//|/\*)' \
     || true
 }
@@ -97,7 +106,7 @@ pass() {
   printf "%s✓%s %s\n" "${GREEN}" "${NC}" "$1"
 }
 
-echo "Checking ${WEB_SRC}/ for legacy residue..."
+echo "Checking ${SCAN_DIRS[*]} for legacy residue..."
 echo
 
 # --- Check 1: firebase imports ------------------------------------------------
@@ -116,35 +125,41 @@ FIREBASE_RE='from[[:space:]]+["'\''](firebase($|/|-admin)|@firebase/|react-fireb
 FIREBASE_HITS="$(grep_web "${FIREBASE_RE}")"
 if [[ -n "${FIREBASE_HITS}" ]]; then
   fail "firebase / firebase-admin import detected" \
-    "No file in ${WEB_SRC} may import from any firebase package. Use Supabase + tRPC instead. See PORT.md → 'The golden no-residue rule'." \
+    "No file in ${SCAN_DIRS[*]} may import from any firebase package. Use Supabase + tRPC instead. See PORT.md → 'The golden no-residue rule'." \
     "${FIREBASE_HITS}"
 else
   pass "no firebase imports"
 fi
 
 # --- Check 2: legacy /api/* mirroring routes ----------------------------------
-# Allowlist: /api/trpc, /api/health, /api/auth/callback, /api/auth/sign-out,
-# /api/chat/stream. Anything else under apps/web/src/app/api/ is a legacy
-# mirror.
-#
-# We list every route handler under apps/web/src/app/api/, strip the
-# allowlisted subtrees, and fail on whatever's left.
-API_DIR="${WEB_SRC}/app/api"
-if [[ -d "${API_DIR}" ]]; then
-  STRAY_API="$(find "${API_DIR}" \
+# Allowlist (per app):
+#   apps/web   — /api/trpc, /api/health, /api/auth/callback, /api/auth/sign-out, /api/chat/stream
+#   apps/admin — /api/health  (admin is a pure Next app; reads go DB-direct via
+#                 lib helpers, writes go to apps/api over tRPC, no /api/* mirrors)
+STRAY_TOTAL=""
+for dir in "${SCAN_DIRS[@]}"; do
+  API_DIR="${dir}/app/api"
+  [[ -d "${API_DIR}" ]] || continue
+  if [[ "${dir}" == "apps/web/src" ]]; then
+    ALLOWLIST_RE='^apps/web/src/app/api/(trpc|health|auth/callback|auth/sign-out|chat/stream)(/|$)'
+  else
+    ALLOWLIST_RE='^apps/admin/src/app/api/(health)(/|$)'
+  fi
+  STRAY="$(find "${API_DIR}" \
       \( -name 'route.ts' -o -name 'route.tsx' -o -name 'route.js' -o -name 'route.mjs' \) \
       2>/dev/null \
-    | grep -Ev '^apps/web/src/app/api/(trpc|health|auth/callback|auth/sign-out|chat/stream)(/|$)' \
+    | grep -Ev "${ALLOWLIST_RE}" \
     || true)"
-  if [[ -n "${STRAY_API}" ]]; then
-    fail "stray /api/* route handlers detected" \
-      "Only /api/trpc, /api/health, /api/auth/callback, /api/auth/sign-out, and /api/chat/stream are allowed. Move data fetching to tRPC capabilities. See PORT.md → 'The golden no-residue rule'." \
-      "${STRAY_API}"
-  else
-    pass "no stray /api/* routes (allowlist: /trpc, /health, /auth/callback, /auth/sign-out, /chat/stream)"
+  if [[ -n "${STRAY}" ]]; then
+    STRAY_TOTAL="${STRAY_TOTAL}${STRAY}"$'\n'
   fi
+done
+if [[ -n "${STRAY_TOTAL}" ]]; then
+  fail "stray /api/* route handlers detected" \
+    "Only allowlisted routes are permitted (web: trpc, health, auth/callback, auth/sign-out, chat/stream; admin: health). Move data fetching to tRPC capabilities or lib helpers. See PORT.md → 'The golden no-residue rule'." \
+    "${STRAY_TOTAL%$'\n'}"
 else
-  pass "no /api/ directory at all (clean)"
+  pass "no stray /api/* routes (web allowlist: /trpc, /health, /auth/callback, /auth/sign-out, /chat/stream; admin allowlist: /health)"
 fi
 
 # --- Check 3: client-side fetches to legacy /api/* paths ----------------------
@@ -226,8 +241,8 @@ fi
 # --- summary ------------------------------------------------------------------
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
-  printf "%s%scheck-no-residue: clean (apps/web/src/ has zero legacy residue)%s\n" \
-    "${GREEN}" "${BOLD}" "${NC}"
+  printf "%s%scheck-no-residue: clean (%s have zero legacy residue)%s\n" \
+    "${GREEN}" "${BOLD}" "${SCAN_DIRS[*]}" "${NC}"
   exit 0
 else
   printf "%s%scheck-no-residue: %d failure(s) — see PORT.md \"The golden no-residue rule\".%s\n" \

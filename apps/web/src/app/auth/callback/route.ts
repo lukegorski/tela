@@ -12,10 +12,21 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get('code');
   const next = url.searchParams.get('next') ?? '/';
 
+  // Inside Railway's container `request.url`'s host is `localhost:8080` (Next's
+  // internal bind), so absolute redirects built from it dumped users at
+  // localhost after sign-in. The x-forwarded-host + x-forwarded-proto headers
+  // preserve the public origin that the browser sees. Falls back to
+  // request.url.origin for local dev (no proxy in front).
+  const forwardedHost = request.headers.get('x-forwarded-host');
+  const forwardedProto = request.headers.get('x-forwarded-proto');
+  const baseUrl = forwardedHost
+    ? `${forwardedProto ?? 'https'}://${forwardedHost}`
+    : url.origin;
+
   // Where to send the user when something goes wrong. Landing page is the
   // login surface; an `?error` query param surfaces in the UI.
   const errorRedirect = (msg: string) =>
-    NextResponse.redirect(new URL(`/?error=${encodeURIComponent(msg)}`, request.url));
+    NextResponse.redirect(new URL(`/?error=${encodeURIComponent(msg)}`, baseUrl));
 
   if (!code) {
     return errorRedirect('missing_code');
@@ -28,5 +39,5 @@ export async function GET(request: NextRequest) {
     return errorRedirect(error.message);
   }
 
-  return NextResponse.redirect(new URL(next, request.url));
+  return NextResponse.redirect(new URL(next, baseUrl));
 }

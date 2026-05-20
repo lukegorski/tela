@@ -24,6 +24,19 @@ function outfitsQueryKey(
 }
 
 /**
+ * Prefix that matches BOTH `savedOnly: true` and `savedOnly: false` query
+ * keys. Use this when invalidating after a mutation whose effect crosses
+ * the views (toggleSave, setFeedback, removeOutfit) — without this the
+ * lookbook stayed on its cached empty state after a Save from /outfits,
+ * because the two views are separate cache entries and the global
+ * retryOnMount: false (Provider.tsx) means navigation alone doesn't
+ * refetch.
+ */
+function outfitsQueryKeyPrefix(userId: string | null): QueryKey {
+  return ["capability", "outfit.list", userId] as const;
+}
+
+/**
  * Outfits data hook. Public shape mirrors the legacy outfits page's
  * inline state so the UI port stays close to the original. Internally:
  *
@@ -210,9 +223,13 @@ export function useOutfits(opts?: { savedOnly?: boolean }) {
         if (prev) queryClient.setQueryData(queryKey, prev);
         throw err;
       } finally {
-        // Settle: refetch the authoritative state. Cheap given staleTime
-        // dedupes; cells stay correct if the optimistic shape drifts.
-        await queryClient.invalidateQueries({ queryKey });
+        // Settle: refetch BOTH savedOnly variants so the lookbook view
+        // reflects this save the next time the user navigates there.
+        // Without the prefix, only the current view's cache invalidates,
+        // and the other view serves stale state until hard-refresh.
+        await queryClient.invalidateQueries({
+          queryKey: outfitsQueryKeyPrefix(userId),
+        });
       }
     },
     [userId, execute, queryClient, queryKey, savedOnly],
@@ -242,7 +259,11 @@ export function useOutfits(opts?: { savedOnly?: boolean }) {
         if (prev) queryClient.setQueryData(queryKey, prev);
         throw err;
       } finally {
-        await queryClient.invalidateQueries({ queryKey });
+        // Prefix invalidation — feedback set on an outfit must surface
+        // in both /outfits and /lookbook (if saved). See toggleSave.
+        await queryClient.invalidateQueries({
+          queryKey: outfitsQueryKeyPrefix(userId),
+        });
       }
     },
     [userId, execute, queryClient, queryKey],
@@ -271,7 +292,11 @@ export function useOutfits(opts?: { savedOnly?: boolean }) {
         if (prev) queryClient.setQueryData(queryKey, prev);
         throw err;
       } finally {
-        await queryClient.invalidateQueries({ queryKey });
+        // Prefix invalidation — deleting a saved outfit must clear it
+        // from /lookbook too. See toggleSave.
+        await queryClient.invalidateQueries({
+          queryKey: outfitsQueryKeyPrefix(userId),
+        });
       }
     },
     [userId, execute, queryClient, queryKey],

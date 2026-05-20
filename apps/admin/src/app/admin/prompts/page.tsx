@@ -9,10 +9,13 @@
  */
 import Link from 'next/link';
 import { listPrompts } from '@/lib/admin-prompts';
+import { requireAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminPromptsPage() {
+  await requireAdmin();
+
   const base = `/admin/prompts`;
 
   const prompts = await listPrompts();

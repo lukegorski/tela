@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getAdminUserDetail } from '@/lib/admin-users';
 import { formatCents } from '@/lib/admin-stats';
+import { requireAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,8 @@ export default async function AdminUserDetailPage({
 }: {
   params: Promise<{ userId: string }>;
 }) {
+  await requireAdmin();
+
   const { userId } = await params;
 
   const detail = await getAdminUserDetail(userId);

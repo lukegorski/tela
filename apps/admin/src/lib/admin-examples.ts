@@ -78,7 +78,7 @@ function rowToExample(r: {
     reasoning: r.reasoning,
     context: r.context,
     tags: r.tags ?? [],
-    createdAt: r.created_at.toISOString(),
-    updatedAt: r.updated_at.toISOString(),
+    createdAt: new Date(r.created_at as string | Date).toISOString(),
+    updatedAt: new Date(r.updated_at as string | Date).toISOString(),
   };
 }

@@ -446,6 +446,28 @@ backend (`/api/admin/ai/chat/route.ts`):
     Supabase admin-API operation, route it through an apps/api
     capability rather than pulling the service-role key into admin.
 
+    **Auth gate convention** (verified during 14a, Next 16): every
+    `/admin/*` RSC page MUST call `await requireAdmin()` as the
+    first statement of its default-exported function. Layout-level
+    `requireAdmin()` alone doesn't reliably interrupt child rendering
+    in Next 16 dev mode (the layout's redirect throw is emitted as a
+    `NEXT_REDIRECT` RSC marker, but children still render in
+    parallel; the browser ultimately follows the redirect but the
+    response body contains rendered admin data). The
+    `/admin/layout.tsx` `requireAdmin()` call stays in place as
+    defense in depth, but the page-level call is the load-bearing
+    gate. Per-page wrap pattern:
+
+    ```tsx
+    import { requireAdmin } from '@/lib/admin';
+    export const dynamic = 'force-dynamic';
+
+    export default async function MyAdminPage() {
+      await requireAdmin();
+      // ... data fetch + render
+    }
+    ```
+
 ---
 
 ## D.14c — AdminAiChat surface + DNS cut

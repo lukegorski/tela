@@ -9,6 +9,7 @@
  */
 import { getCostsReport } from '@/lib/admin-costs';
 import { formatCents } from '@/lib/admin-stats';
+import { requireAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,8 @@ interface Props {
 }
 
 export default async function AdminCostsPage({ searchParams }: Props) {
+  await requireAdmin();
+
   const sp = await searchParams;
 
   const days = sp.days ? Math.min(Math.max(parseInt(sp.days, 10) || 30, 1), 90) : 30;

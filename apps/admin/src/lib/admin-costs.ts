@@ -126,7 +126,7 @@ export async function getCostsReport(days = 30): Promise<CostsReport> {
       model: r.model,
       costCents: r.cost_cents,
       latencyMs: r.latency_ms,
-      createdAt: r.created_at.toISOString(),
+      createdAt: new Date(r.created_at as string | Date).toISOString(),
     })),
   };
 }

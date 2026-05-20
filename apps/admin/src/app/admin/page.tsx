@@ -10,10 +10,13 @@
  * queries. Drilldown views live in /admin/users, /admin/costs, etc.
  */
 import { getDashboardStats, formatCents } from '@/lib/admin-stats';
+import { requireAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminOverviewPage() {
+  await requireAdmin();
+
   const stats = await getDashboardStats();
 
   return (

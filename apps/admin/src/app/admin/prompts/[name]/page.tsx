@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getPromptDetail } from '@/lib/admin-prompts';
 import { PromptEditor } from '@/components/admin/PromptEditor';
+import { requireAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,8 @@ export default async function PromptDetailPage({
 }: {
   params: Promise<{ name: string }>;
 }) {
+  await requireAdmin();
+
   const { name } = await params;
 
   // Next URL-encodes path segments containing '.' but the route param arrives

@@ -7,10 +7,13 @@
  */
 import Link from 'next/link';
 import { listAllRules, groupByCategory } from '@/lib/admin-rules';
+import { requireAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminRulesPage() {
+  await requireAdmin();
+
   const base = `/admin/rules`;
 
   const rules = await listAllRules();

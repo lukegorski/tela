@@ -60,7 +60,7 @@ export async function listPrompts(): Promise<PromptSummary[]> {
     description: r.description,
     latestVersionId: r.latest_version_id,
     versionCount: r.version_count,
-    latestUpdatedAt: r.latest_updated_at ? r.latest_updated_at.toISOString() : null,
+    latestUpdatedAt: r.latest_updated_at ? new Date(r.latest_updated_at as string | Date).toISOString() : null,
   }));
 }
 

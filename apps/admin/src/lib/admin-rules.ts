@@ -42,8 +42,8 @@ export async function listAllRules(): Promise<StylistRule[]> {
     priority: r.priority,
     active: r.active,
     version: r.version,
-    createdAt: r.created_at.toISOString(),
-    updatedAt: r.updated_at.toISOString(),
+    createdAt: new Date(r.created_at as string | Date).toISOString(),
+    updatedAt: new Date(r.updated_at as string | Date).toISOString(),
   }));
 }
 
@@ -75,8 +75,8 @@ export async function getRule(id: string): Promise<StylistRule | null> {
     priority: r.priority,
     active: r.active,
     version: r.version,
-    createdAt: r.created_at.toISOString(),
-    updatedAt: r.updated_at.toISOString(),
+    createdAt: new Date(r.created_at as string | Date).toISOString(),
+    updatedAt: new Date(r.updated_at as string | Date).toISOString(),
   };
 }
 

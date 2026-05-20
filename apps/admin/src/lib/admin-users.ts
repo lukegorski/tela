@@ -69,7 +69,7 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
     chatMessageCount: r.chat_message_count,
     generationCount: r.generation_count,
     spendCents: r.spend_cents,
-    createdAt: r.created_at.toISOString(),
+    createdAt: new Date(r.created_at as string | Date).toISOString(),
   }));
 }
 

@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { listAdminUsers } from '@/lib/admin-users';
 import { formatCents } from '@/lib/admin-stats';
+import { requireAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminUsersPage() {
+  await requireAdmin();
+
   const base = `/admin/users`;
 
   const users = await listAdminUsers();

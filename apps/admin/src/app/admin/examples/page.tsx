@@ -1,9 +1,12 @@
 import Link from 'next/link';
 import { listAllExamples } from '@/lib/admin-examples';
+import { requireAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminExamplesPage() {
+  await requireAdmin();
+
   const base = `/admin/examples`;
 
   const examples = await listAllExamples();

@@ -2,6 +2,8 @@
 
 Items that surfaced before, during, or shortly after the Phase 11 cutover but were out of scope for the cutover itself. This is the canonical tracking list — add new items here as they surface; don't bury them in session summaries.
 
+*See also: [`phase-11-cutover-runbook.md`](./phase-11-cutover-runbook.md) for the cutover steps themselves; [`phase-14-admin-parity.md`](./phase-14-admin-parity.md) for the admin workstream that surfaced the latest UI-polish entry.*
+
 Each item has a severity, a short description, and the origin (where it was surfaced) for context.
 
 **Severity legend**:

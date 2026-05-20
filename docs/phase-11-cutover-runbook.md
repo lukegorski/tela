@@ -323,6 +323,7 @@ These are not part of the cutover itself but should be tracked as their own tick
 - **Promote to `tela/prd` Doppler config + separate Supabase project.** Pre-launch we accepted shared dev/prod infra. Real prod hygiene is its own workstream.
 - **Three dead-code `postgres()` clients in `apps/web/src/lib/` (profile.ts, chat.ts, users.ts)**. No callers found; pgbouncer-naive (no `prepare: false`). Either wire them up or delete.
 - **Delete or update the migration script's UX message at [migrate-user-from-legacy.ts:566](../packages/capabilities/scripts/migrate-user-from-legacy.ts:566)** that promises "style profile will regenerate on first generate" — that's now actually true thanks to the lazy-init, but the wording could be clearer.
+- **Visual polish pass on `apps/admin` (Phase 14a Option B).** The fd4b451 page JSX shipped as-is — denser data than legacy admin (extra columns: chats / generations / spend, absolute dates, no avatars, all E2E test users visible). Keep the extra columns (genuinely useful for admin triage; legacy's minimal shape was a Firestore-query constraint, not a UX choice), but polish the visual: add avatar circles (letter or supabase avatar_url), tighten typography/spacing, switch absolute dates to relative (`11d ago`), add a toggle to hide E2E test rows (`@tela.test` email suffix). Applies to all 5 existing pages where legacy/new diverge (users, costs, examples, prompts, rules). ~0.5–1 day of UI work. Surfaced after Luke's first Railway smoke test of the new admin — see screenshots from the 14a ship.
 
 ---
 

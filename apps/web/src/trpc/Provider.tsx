@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { httpBatchLink } from '@trpc/client';
 import superjson from 'superjson';
 import { trpc } from './client';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { waitForToken } from '@/lib/auth-token-store';
 
 /**
  * Wraps the app with the tRPC + React Query providers.
@@ -54,34 +54,17 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
           url: `${process.env.NEXT_PUBLIC_API_URL}/trpc`,
           transformer: superjson,
           async headers() {
-            // Defensive timeout: if supabase.auth.getSession() hangs (we've
-            // seen this in dev — multi-client races, stale Web Locks, etc.),
-            // we'd otherwise block every tRPC call indefinitely and freeze
-            // every consumer hook (useOutfits.loading stuck on true, etc.).
-            // 10s is generous enough that the @supabase/ssr browser client's
-            // first cookie read can complete on cold page load (where 3s was
-            // tripping the timeout, sending requests without auth headers,
-            // and getting 401s back), but still bounded so a genuinely
-            // hung session doesn't deadlock the UI forever.
-            const supabase = getSupabaseBrowserClient();
-            try {
-              const session = await Promise.race([
-                supabase.auth.getSession().then(({ data }) => data.session),
-                new Promise<null>((resolve) =>
-                  setTimeout(() => {
-                    // eslint-disable-next-line no-console
-                    console.warn(
-                      '[trpc] supabase.auth.getSession() did not resolve within 10s — sending request without auth token',
-                    );
-                    resolve(null);
-                  }, 10000),
-                ),
-              ]);
-              const token = session?.access_token;
-              return token ? { Authorization: `Bearer ${token}` } : {};
-            } catch {
-              return {};
-            }
+            // Phase B refactor: read the access token from the module-scoped
+            // auth-token-store instead of calling supabase.auth.getSession()
+            // per request. The store is written by useAuth's
+            // onAuthStateChange listener (INITIAL_SESSION, SIGNED_IN,
+            // SIGNED_OUT, TOKEN_REFRESHED, USER_UPDATED). waitForToken's
+            // 1500ms timeout matters only for the very first request after
+            // page load — once the listener has fired, reads are sync and
+            // free. Gracefully degrades to "no token, request 401s" if the
+            // listener never fires (vs. the legacy 10s hang).
+            const token = await waitForToken();
+            return token ? { Authorization: `Bearer ${token}` } : {};
           },
         }),
       ],

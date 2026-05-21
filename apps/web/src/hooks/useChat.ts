@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { trpc } from "@/trpc/client";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { waitForToken } from "@/lib/auth-token-store";
 import { useAuthContext } from "@/components/AuthProvider";
 import { useDictionary } from "@/components/DictionaryProvider";
 import type { ComposerAttachment } from "@/components/ChatComposer";
@@ -299,9 +299,13 @@ export function useChat(): UseChatReturn {
       abortRef.current = abort;
 
       try {
-        const supabase = getSupabaseBrowserClient();
-        const { data } = await supabase.auth.getSession();
-        const token = data.session?.access_token;
+        // Phase B refactor: read from auth-token-store instead of calling
+        // supabase.auth.getSession() per chat-message send. waitForToken's
+        // bounded timeout (1500ms default) gracefully degrades if the
+        // listener hasn't fired yet — though for chat, the user has
+        // already loaded the chat page (so auth has long since settled)
+        // and the wait is effectively a sync read.
+        const token = await waitForToken();
         if (!token) throw new Error("Not signed in");
 
         const apiUrl = process.env.NEXT_PUBLIC_API_URL;

@@ -10,15 +10,28 @@
  * just shaped to look familiar to ported components.
  *
  * Implementation:
- *   - Subscribes to supabase.auth.onAuthStateChange for the auth user.
- *   - On every auth state change, calls auth.whoami via tRPC to refresh
- *     the canonical app-side profile (server-side capability handles
- *     first-sign-in user record creation).
+ *   - Subscribes to supabase.auth.onAuthStateChange — that subscription
+ *     fires an INITIAL_SESSION event immediately, then SIGNED_IN /
+ *     SIGNED_OUT / TOKEN_REFRESHED / USER_UPDATED as auth state changes.
+ *   - On every event: writes the current access token into the module-
+ *     level auth-token-store (so tRPC + the chat-stream POST can read
+ *     it synchronously without calling getSession themselves), then
+ *     refreshes the canonical app-side profile via auth.whoami.
  *   - Sign-in methods call Supabase auth APIs directly. OAuth uses the
  *     `/auth/callback` route we already set up; email/password is direct.
+ *   - signOut clears the token store SYNCHRONOUSLY (before awaiting
+ *     supabase.auth.signOut) and cancels in-flight React Query work so
+ *     no authenticated effect lingers post-sign-out.
+ *
+ * Phase B (Phase 11 cutover-prep) refactor: removed the explicit
+ * getSession() call on mount + per-tRPC-request getSession() reads. See
+ * apps/web/src/lib/auth-token-store.ts for the cache + waitForToken
+ * pattern that replaces them.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { setCurrentToken } from '@/lib/auth-token-store';
 import { trpc } from '@/trpc/client';
 
 /**
@@ -106,6 +119,7 @@ interface UseAuthReturn {
 
 export function useAuth(): UseAuthReturn {
   const supabase = useRef(getSupabaseBrowserClient()).current;
+  const queryClient = useQueryClient();
   const execute = trpc.capability.execute.useMutation();
   // useMutation returns a fresh wrapper object every render even though
   // mutateAsync itself is a stable ref. Keep a ref to the latest wrapper
@@ -171,38 +185,39 @@ export function useAuth(): UseAuthReturn {
 
   useEffect(() => {
     let mounted = true;
+    let initialEventReceived = false;
 
-    // Defensive timeout: if getSession() never resolves (e.g., a hung
-    // Supabase initialisation, a network stall on the storage layer),
-    // we still want loading to flip false within a bounded window so
-    // ProtectedRoute can route the user to the landing page rather than
-    // sit on a loading spinner forever. Cleared on the happy path.
+    // Defensive timeout: if onAuthStateChange never fires its INITIAL_SESSION
+    // event (shouldn't happen — supabase-js emits it synchronously on
+    // subscription — but defense in depth), flip loading=false within a
+    // bounded window so ProtectedRoute can route the user to the landing
+    // page rather than sit on a loading spinner forever. 2s is plenty —
+    // the event normally fires within 50-200ms.
     const fallbackTimer = setTimeout(() => {
-      if (mounted) {
+      if (mounted && !initialEventReceived) {
         // eslint-disable-next-line no-console
         console.warn(
-          '[useAuth] supabase.auth.getSession() did not resolve within 5s — proceeding as anonymous',
+          '[useAuth] onAuthStateChange INITIAL_SESSION did not fire within 2s — proceeding as anonymous',
         );
+        setCurrentToken(null);
         setLoading(false);
       }
-    }, 5000);
+    }, 2000);
 
-    // Initial state
-    void supabase.auth.getSession().then(async ({ data }) => {
-      clearTimeout(fallbackTimer);
-      if (!mounted) return;
-      const sessionUser = data.session?.user;
-      if (sessionUser) {
-        setUser(toAuthUser(sessionUser));
-        const p = await fetchProfile();
-        if (mounted) setProfile(p);
-      }
-      if (mounted) setLoading(false);
-    });
-
-    // React to subsequent auth changes (sign-in, sign-out, token refresh)
+    // Single source of truth: the listener handles INITIAL_SESSION (which
+    // replaces the explicit getSession() call we used to have) plus all
+    // subsequent events. Each event: write token to store FIRST, then
+    // update React state.
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!mounted) return;
+      if (!initialEventReceived) {
+        initialEventReceived = true;
+        clearTimeout(fallbackTimer);
+      }
+      // Token store goes FIRST — any tRPC request already mid-flight that
+      // hasn't yet read the token will see the new value immediately.
+      setCurrentToken(session?.access_token ?? null);
+
       const sessionUser = session?.user ?? null;
       if (sessionUser) {
         setUser(toAuthUser(sessionUser));
@@ -212,6 +227,7 @@ export function useAuth(): UseAuthReturn {
         setUser(null);
         setProfile(null);
       }
+      if (mounted) setLoading(false);
     });
 
     return () => {
@@ -269,10 +285,17 @@ export function useAuth(): UseAuthReturn {
   );
 
   const signOut = useCallback(async () => {
+    // Sign-out race mitigation: clear the token store BEFORE awaiting
+    // supabase.auth.signOut(), so any in-flight tRPC/chat-stream request
+    // that hasn't yet read the token sees null instead of the old (still
+    // technically valid until expiry) token. Then cancel React Query
+    // in-flight work so no authenticated effect lingers post-sign-out.
+    setCurrentToken(null);
+    void queryClient.cancelQueries();
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
-  }, [supabase]);
+  }, [supabase, queryClient]);
 
   const refreshProfile = useCallback(async () => {
     const p = await fetchProfile();

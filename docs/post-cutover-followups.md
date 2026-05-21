@@ -21,9 +21,14 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
   Right now `useAuth.ts` and `generate-magic-link.ts` pass bare `redirectTo` so that deep-link return (`?next=...`) doesn't break the allowlist match. Adding `?**` wildcards in Supabase Auth → URL Configuration lets us restore deep-link UX (sign-in returns user to the page they were on, not the home page).
   *Origin*: phase-11 cutover runbook.
 
-- **OAuth popup R&D** — P2.
+- **OAuth popup R&D** — P2 (consider promoting to P1 once Phase B `getSession` caching lands).
   Current flow is full-page redirect. Popup would feel snappier and avoid the auth context flush. Two paths to investigate: (a) Supabase + COOP-compliant popup wrapper, (b) Google One Tap via `supabase.auth.signInWithIdToken`. Earlier popup attempt was reverted (commit `55bcb8c`) — re-attempt with lessons learned.
-  *Origin*: Phase 11 deployment session summary.
+
+  **Dependency on "Session caching in `Provider.tsx`" (Performance & Reliability section below):** the root cause that killed the original popup attempt was `supabase.auth.getSession()` hanging under COOP constraints in the popup window, which broke every tRPC call because each one called `getSession()` to attach the JWT. The Phase B fix caches the session via `onAuthStateChange` and stops calling `getSession()` per-request, so that hang class no longer matters. Re-attempting popup R&D **after** Phase B is significantly lower risk. Sequence: Phase B → popup R&D viable → choose path (a) or (b) → ship snappier sign-in.
+
+  Slight silver lining of the current redirect flow: the OAuth consent screen is fully prominent (vs. partially obscured inside a 500×600 popup), which made the Phase A branding work matter more — and the payoff is more visible.
+
+  *Origin*: Phase 11 deployment session summary; dependency note added during Phase A.
 
 - **Google Cloud OAuth branding** — P1.
   Consent screen currently shows the raw Supabase project URL (`cyupcwfvtbfkupbdcoql.supabase.co`) as the app name. Update Google Cloud Console → OAuth consent screen to "Tela", upload logo, set authorized domains, fill out support email + privacy policy URL. Required before any public-facing launch.

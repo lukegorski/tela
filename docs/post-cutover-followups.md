@@ -30,8 +30,11 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
 
   *Origin*: Phase 11 deployment session summary; dependency note added during Phase A.
 
-- **Google Cloud OAuth branding** — P1.
-  Consent screen currently shows the raw Supabase project URL (`cyupcwfvtbfkupbdcoql.supabase.co`) as the app name. Update Google Cloud Console → OAuth consent screen to "Tela", upload logo, set authorized domains, fill out support email + privacy policy URL. Required before any public-facing launch.
+- **Google Cloud OAuth branding** — `[DONE 2026-05-21]`.
+  ~~Consent screen currently shows the raw Supabase project URL (`cyupcwfvtbfkupbdcoql.supabase.co`) as the app name. Update Google Cloud Console → OAuth consent screen to "Tela", upload logo, set authorized domains, fill out support email + privacy policy URL. Required before any public-facing launch.~~
+  Shipped as Phase A. Console Branding fields populated (App name = "Tela", icon-only square logo uploaded, home + privacy + ToS URLs pointing at `https://telastyle.app/*`, authorized domains include `telastyle.app`, developer + support email set). Repo-side deliverables: (a) 5 standalone policy pages under `/(legal)/` route group (privacy, terms, cookies, biometric-policy, dmca) rendered with the Tela design system, (b) PNG logo assets under `apps/web/public/brand/`, (c) proxy.ts exemption so `/privacy` etc. don't get locale-redirected, (d) landing-page legal-consent line linking to `/terms` + `/privacy` so Google's home-page link check passes post-cutover.
+  Commits: `3a056a2` (5 policy pages), `f69df26` (OAuth logo assets + render script), `fa2b7a9` (locale-redirect exemption for legal routes), `baa50a2` (landing-page legal-consent line), `a5101ab` (added the "OAuth app verification (post-cutover)" followup entry below).
+  **Note:** branding deliverable is complete; *verification clearance* is a separate workstream tracked under "OAuth app verification (post-cutover)" because Google's "Verify branding" submission needs the URLs to resolve, which requires Phase 11 DNS cutover.
   *Origin*: Phase 11 deployment session summary.
 
 - **OAuth app verification (post-cutover)** — P2 (dependent on Phase 11 cutover completion).
@@ -61,8 +64,11 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
 
 ## Performance & Reliability
 
-- **Session caching in `Provider.tsx` (getSession timeouts)** — P1.
-  `supabase.auth.getSession() did not resolve within 10s` warning fires repeatedly in console. Defensive timeout falls back to no-auth → api 401s. App still works because of cached data + 30s staleTime, but degrades and muddies post-cutover monitoring (real 401s look like timeout 401s in logs). Fix: cache the session via `onAuthStateChange` instead of calling `getSession()` on every tRPC request. Non-trivial but real.
+- **Session caching in `Provider.tsx` (getSession timeouts)** — `[DONE 2026-05-21]`.
+  ~~`supabase.auth.getSession() did not resolve within 10s` warning fires repeatedly in console. Defensive timeout falls back to no-auth → api 401s. App still works because of cached data + 30s staleTime, but degrades and muddies post-cutover monitoring (real 401s look like timeout 401s in logs). Fix: cache the session via `onAuthStateChange` instead of calling `getSession()` on every tRPC request. Non-trivial but real.~~
+  Shipped as Phase B. Introduced `apps/{web,admin}/src/lib/auth-token-store.ts` — a module-scoped token cache written by useAuth's `onAuthStateChange` listener (covers INITIAL_SESSION, SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, USER_UPDATED). tRPC's `headers()` and the chat-stream POST now read the token synchronously from the store via `waitForToken()` — a 1500ms bounded race that gracefully degrades to "no token, request 401s" rather than recreating the original 10s hang class. `signOut()` clears the store synchronously *before* awaiting `supabase.auth.signOut()` and calls `queryClient.cancelQueries()` so no in-flight authenticated work lingers post-sign-out.
+  Verified: zero `did not resolve within 10s` warnings observed in browser console across post-deploy smoke tests on both `tela-web-development.up.railway.app` (sign in, navigate wardrobe/outfits/chat, sign out, cross-tab) and `tela-admin-development.up.railway.app` (sign in, view costs dashboard).
+  Commits: `2445c40` (web — auth-token-store, useAuth, trpc/Provider, useChat), `e2182ec` (admin — verbatim mirror; the three touched files remain byte-identical between apps).
   *Origin*: Phase 11 deployment session summary.
 
 ## Observability
@@ -70,6 +76,15 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
 - **Sentry in `apps/web`** — P1.
   Client-side observability gap. `apps/api` has Sentry server-side; `apps/web` does not. We're monitoring blind for browser-side issues post-cutover — if a user reports "page is broken" we have no client-side stack traces. Wire `@sentry/nextjs` into apps/web; add `SENTRY_DSN` to web's env-var allowlist on Railway.
   *Origin*: Phase 11 deployment session summary + cutover runbook.
+
+- **Next `<Image>` warnings + Supabase signed-URL 400s in browser console** — P2.
+  Two related but distinct issues fire on any signed-in page that renders wardrobe / outfit / try-on images. They pollute the browser console (obscuring real errors during triage) and degrade image performance:
+
+  1. **Signed-URL 400s.** Requests to `/_next/image?url=https%3A%2F%2Fcyupcwfvtbfkupbdcoql.supabase.co/storage/v1/object/sign/...` return 400 from Next's image optimizer. Likely cause: either the Supabase storage domain isn't whitelisted in `apps/web/next.config.ts`'s `images.remotePatterns`, or the optimizer mishandles the signed-URL query string. Functionally silent — `<Image>` falls back to the source URL so images do render — but we lose Next's resize/format/cache optimization on every wardrobe item. Performance cost scales with image count and viewport size.
+  2. **`<Image>` prop misuse warnings.** Multiple instances of `fill` + `sizes="100vw"` mismatch (image not rendered at full viewport width), `fill` inside parents with invalid `position: static`, and an LCP-image without `loading="eager"`. Not user-visible but trips Next's dev overlay and adds noise to console during real-error triage.
+
+  Fix path: (a) add Supabase storage host to `next.config.ts` `images.remotePatterns` and verify the optimizer can fetch signed URLs (may need a custom loader or to fall back to unoptimized for signed URLs); (b) audit `<Image fill>` call sites — set parent `position: relative`, set `sizes` to match the rendered breakpoint, and add `loading="eager"` (or `priority`) on the landing/wardrobe LCP image.
+  *Origin*: surfaced repeatedly during Phase A + Phase B browser smoke tests on `tela-web-development.up.railway.app` (every wardrobe/outfit/chat page load reproduces it).
 
 ## Infrastructure
 

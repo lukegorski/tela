@@ -18,7 +18,30 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { detectLocaleFromHeader, isLocale } from '@/lib/i18n';
 
-const LOCALE_EXEMPT_PREFIXES = ['/auth', '/api', '/trpc', '/chat/stream', '/_next'];
+// Routes exempt from the locale-prefix redirect.
+//
+// The /auth, /api, /trpc, /chat/stream, /_next set covers OAuth callbacks,
+// API surface, and Next internals.
+//
+// The legal route group at apps/web/src/app/(legal)/* — privacy, terms,
+// cookies, biometric-policy, dmca — is deliberately locale-free: the URLs
+// are referenced from Google's OAuth consent screen and from the policies
+// themselves, so they must be stable. Translated versions will live at
+// /es/* and /pt-BR/* in a sibling group once translations land
+// (post-Phase-A); those will not pass through this redirect either because
+// the first segment will already be a locale.
+const LOCALE_EXEMPT_PREFIXES = [
+  '/auth',
+  '/api',
+  '/trpc',
+  '/chat/stream',
+  '/_next',
+  '/privacy',
+  '/terms',
+  '/cookies',
+  '/biometric-policy',
+  '/dmca',
+];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

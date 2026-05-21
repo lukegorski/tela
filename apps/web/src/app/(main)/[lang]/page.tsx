@@ -280,6 +280,11 @@ export default function LandingPage() {
                 : dict.login?.needAccount ?? "Need an account?"}
             </button>
 
+            <LegalConsent
+              className="text-center text-[10px] tracking-wider text-stone-500 dark:text-stone-400"
+              linkClassName="underline hover:text-stone-900 dark:hover:text-stone-100 transition-colors"
+            />
+
             {error && (
               <p className="text-sm text-red-600 dark:text-red-400 text-center">{error}</p>
             )}
@@ -345,6 +350,10 @@ export default function LandingPage() {
             >
               {dict.login?.continueWithEmail ?? "Continue with email"}
             </button>
+            <LegalConsent
+              className="text-center text-[10px] tracking-wider text-white/60 pt-1"
+              linkClassName="underline hover:text-white transition-colors"
+            />
           </div>
         </div>
       </div>
@@ -399,6 +408,11 @@ export default function LandingPage() {
               </button>
             </div>
 
+            <LegalConsent
+              className="text-center text-[10px] tracking-wider text-stone-500 dark:text-stone-400 pt-1"
+              linkClassName="underline hover:text-stone-900 dark:hover:text-stone-100 transition-colors"
+            />
+
             {error && (
               <p className="text-sm text-red-600 dark:text-red-400 text-center">{error}</p>
             )}
@@ -407,5 +421,30 @@ export default function LandingPage() {
       </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Tiny legal-consent line shown below the sign-in buttons in all three
+ * sign-in views (email form, mobile main, desktop main). Required so
+ * Google's OAuth consent screen verification can find a privacy-policy
+ * link from the home page; doubles as affirmative ToS acceptance on
+ * sign-in. Both /terms and /privacy live in the (legal) route group at
+ * the URL root (no locale prefix).
+ */
+function LegalConsent({
+  className,
+  linkClassName,
+}: {
+  className: string;
+  linkClassName: string;
+}) {
+  return (
+    <p className={className}>
+      By continuing, you agree to Tela&rsquo;s{' '}
+      <a href="/terms" className={linkClassName}>Terms</a>
+      {' '}and acknowledge our{' '}
+      <a href="/privacy" className={linkClassName}>Privacy Policy</a>.
+    </p>
   );
 }

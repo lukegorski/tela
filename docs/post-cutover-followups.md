@@ -155,6 +155,14 @@ Items surfaced during Phase 14b parity work and the chat-dashboard redesign. Pha
   The `fd4b451` page JSX shipped as-is per Option B (ship-then-polish). The pages are denser than legacy admin (extra columns: chats / generations / spend, absolute dates, no avatars, all E2E test users visible). Keep the extra columns (genuinely useful for admin triage — legacy's minimal shape was a Firestore-query constraint, not a UX choice), but polish: add avatar circles (letter or `supabase avatar_url`), tighten typography + spacing, switch absolute dates to relative (`11d ago`), add a toggle to hide E2E test rows (`@tela.test` email suffix). Applies to all 5 existing pages (users, costs, examples, prompts, rules). ~0.5-1 day of UI work.
   *Origin*: Phase 14a ship (Luke's first Railway smoke test of the new admin) — added in commit `cbd104c`.
 
+- **AdminAiChat polish + UX gaps (Phase 14c)** — P2.
+  The 14c chat UI shipped functional but minimal. Known gaps from the local smoke pass: (a) streaming-turn assistant message has no per-turn cost/model badge until the conversation is re-fetched (the `done` SSE event doesn't include `model`; transcript hydrates on next mount); (b) iOS Safari SSE drops mid-stream on tab backgrounding surface a generic "Connection lost — try again" rather than auto-reconnecting; (c) sidebar bump after `done` is fire-and-forget — silently stale if the refresh fails; (d) no markdown rendering in assistant bubbles (plain `whitespace-pre-wrap`) — legacy had a lightweight `**bold**` / `*italic*` / bullet renderer; (e) tool-call cards show ✓/✗ + JSON args verbatim (legacy mapped tool names to human-readable phrases like "Querying users"). Bundle with the broader Phase 14a polish pass when that lands.
+  *Origin*: Phase 14c session-2 (this UI session) — shipped as the local smoke "good enough, polish later" call.
+
+- **Parallel-worktree dev-server cwd pitfall** — P3.
+  `.claude/launch.json` runs `pnpm --filter @tela/admin exec next dev` from the parent shell's cwd. When a session runs from a worktree (e.g. `/Users/lukegorski/tela-wt-XYZ`) and the preview tool spawns the dev server, pnpm's `--filter` resolves `@tela/admin` to the *main repo's* `apps/admin`, not the worktree's. Symptom: edits in the worktree never appear in the served app; HMR + restart don't help; only obvious from `lsof -p $PID | grep cwd`. The launch.json schema (per the preview tool's signature) doesn't support a `cwd` field, so the in-repo fix would be to switch the runtimeExecutable to `bash scripts/dev-admin.sh` (which CDs to its own parent before exec) or to add `-C <abs-path>` to the pnpm args. Workaround for now: run `bash scripts/dev-admin.sh` manually in any worktree session and skip the preview tool's `preview_start`.
+  *Origin*: Phase 14c session-2 — burned ~20min before the dev server was confirmed running from the main repo, not the worktree, via `lsof -p PID | grep cwd`.
+
 ---
 
 ## When to consult this file

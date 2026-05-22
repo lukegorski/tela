@@ -30,6 +30,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import * as Sentry from '@sentry/nextjs';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { setCurrentToken } from '@/lib/auth-token-store';
 import { trpc } from '@/trpc/client';
@@ -219,6 +220,17 @@ export function useAuth(): UseAuthReturn {
       setCurrentToken(session?.access_token ?? null);
 
       const sessionUser = session?.user ?? null;
+      // Attach Sentry user context alongside the token write. We
+      // INTENTIONALLY pass only `id` — never email/phone/etc. The
+      // privacy policy (`/privacy` lines 161-170) commits to user_id
+      // being the only identifier retained in Sentry. To triage a bug
+      // by user, Luke joins this id to the users table in app DB.
+      if (sessionUser) {
+        Sentry.setUser({ id: sessionUser.id });
+      } else {
+        Sentry.setUser(null);
+      }
+
       if (sessionUser) {
         setUser(toAuthUser(sessionUser));
         const p = await fetchProfile();
@@ -291,6 +303,7 @@ export function useAuth(): UseAuthReturn {
     // technically valid until expiry) token. Then cancel React Query
     // in-flight work so no authenticated effect lingers post-sign-out.
     setCurrentToken(null);
+    Sentry.setUser(null);
     void queryClient.cancelQueries();
     await supabase.auth.signOut();
     setUser(null);

@@ -18,7 +18,7 @@
     "db:push": "turbo db:push --filter=@tela/db",
     "prompts:sync": "turbo prompts:sync --filter=@tela/prompts",
     "dev:admin": "turbo dev --filter=@tela/admin",
-    "verify": "pnpm --filter @tela/db build && pnpm --filter @tela/capabilities build && pnpm --filter @tela/api typecheck && pnpm --filter @tela/web typecheck && pnpm --filter @tela/admin typecheck && bash scripts/check-no-residue.sh",
+    "verify": "pnpm --filter @tela/db build && pnpm --filter @tela/events typecheck && pnpm --filter @tela/ai typecheck && pnpm --filter @tela/capabilities build && pnpm --filter @tela/api typecheck && pnpm --filter @tela/web typecheck && pnpm --filter @tela/admin typecheck && pnpm --filter @tela/web build && pnpm --filter @tela/admin build && bash scripts/check-no-residue.sh",
     "verify:no-residue": "bash scripts/check-no-residue.sh"
   },
   "devDependencies": {

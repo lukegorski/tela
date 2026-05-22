@@ -99,9 +99,9 @@ export const completeOnboarding = registerCapability({
 
     await logEvent({
       userId,
-      type: 'profile.updated',
+      type: 'auth.onboarding_completed',
       source,
-      payload: { reason: 'onboarding_complete', wardrobeGapsWritten },
+      payload: { wardrobeGapsWritten },
     });
 
     return {

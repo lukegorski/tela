@@ -65,7 +65,7 @@ type EnhancementEvent =
 type TryOnEvent = 'tryon.started' | 'tryon.step_completed' | 'tryon.completed' | 'tryon.failed';
 
 // Auth domain
-type AuthEvent = 'auth.signed_up' | 'auth.signed_in';
+type AuthEvent = 'auth.signed_up' | 'auth.signed_in' | 'auth.onboarding_completed';
 
 export type EventType =
   | WardrobeEvent

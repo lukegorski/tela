@@ -4,7 +4,10 @@ import { notFound } from 'next/navigation';
 import { getAdminUserDetail, type AdminUserDetail } from '@/lib/admin-users';
 import { getUserWardrobe } from '@/lib/admin-user-wardrobe';
 import { getUserOutfits } from '@/lib/admin-user-outfits';
-import { getUserChats } from '@/lib/admin-user-chats';
+import {
+  getUserConversations,
+  type UserConversationSummary,
+} from '@/lib/admin-user-conversations';
 import {
   getUserCostsReport,
   type CostBreakdown,
@@ -12,7 +15,6 @@ import {
 } from '@/lib/admin-user-costs-report';
 import type { RichItem } from '@/lib/admin-user-wardrobe';
 import type { RichOutfit } from '@/lib/admin-user-outfits';
-import type { AdminChatMessage } from '@/lib/admin-user-chats';
 import { formatCents } from '@/lib/admin-stats';
 import { requireAdmin } from '@/lib/admin';
 
@@ -134,8 +136,8 @@ async function TabContent({
     return <OutfitsTab outfits={outfits} />;
   }
   if (activeTab === 'chats') {
-    const { messages, total } = await getUserChats(userId);
-    return <ChatsTab messages={messages} total={total} />;
+    const conversations = await getUserConversations(userId);
+    return <ChatsTab conversations={conversations} />;
   }
   if (activeTab === 'costs') {
     const report = await getUserCostsReport(userId);
@@ -368,46 +370,34 @@ function OutfitsTab({ outfits }: { outfits: RichOutfit[] }) {
   );
 }
 
-function ChatsTab({ messages, total }: { messages: AdminChatMessage[]; total: number }) {
-  if (messages.length === 0) return <Empty>No chat messages yet.</Empty>;
+function ChatsTab({ conversations }: { conversations: UserConversationSummary[] }) {
+  if (conversations.length === 0) return <Empty>No chat conversations yet.</Empty>;
   return (
-    <div className="space-y-3 max-w-2xl">
-      <p className="text-xs text-stone-400">
-        {messages.length} of {total} messages, oldest first.
-      </p>
-      {messages.map((msg) => {
-        const isUser = msg.role === 'user';
-        return (
-          <div key={msg.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-            <div className="max-w-[80%] flex flex-col gap-1.5">
-              {msg.content && (
-                <div
-                  className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
-                    isUser
-                      ? 'bg-stone-800 text-white'
-                      : 'bg-stone-100 text-stone-800'
-                  }`}
-                >
-                  {msg.content}
-                </div>
-              )}
-              {msg.toolCalls && msg.toolCalls.length > 0 && (
-                <p className="text-[11px] text-stone-400">
-                  Tools: {msg.toolCalls.map((tc) => tc.name).join(', ')}
+    <ul className="divide-y divide-stone-100 border-t border-b border-stone-200">
+      {conversations.map((c) => (
+        <li key={c.id}>
+          <Link href={`/admin/chats/${c.id}`} className="block px-3 py-3 hover:bg-stone-50">
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-stone-900 truncate">{c.title ?? '(untitled)'}</p>
+                <p className="text-[11px] text-stone-400 font-mono">
+                  started {new Date(c.createdAt).toLocaleDateString()}
                 </p>
-              )}
-              <p
-                className={`text-[11px] text-stone-400 font-mono ${
-                  isUser ? 'text-right' : 'text-left'
-                }`}
-              >
-                {new Date(msg.createdAt).toLocaleString()}
-              </p>
+              </div>
+              <div className="flex items-center gap-4 text-[11px] text-stone-400 font-mono flex-shrink-0">
+                <span>{c.messageCount} msgs</span>
+                <span>{formatCents(c.chatCostCents)}</span>
+                <span>
+                  {c.lastMessageAt
+                    ? new Date(c.lastMessageAt).toLocaleString()
+                    : '—'}
+                </span>
+              </div>
             </div>
-          </div>
-        );
-      })}
-    </div>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
 

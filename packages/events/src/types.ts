@@ -30,6 +30,7 @@ type OutfitEvent =
   | 'outfit.saved'
   | 'outfit.unsaved' // saved → false; row still exists (vs outfit.deleted = row destroyed)
   | 'outfit.deleted'
+  | 'outfit.role_duplicate_dropped' // AI emitted duplicate role; insertion dedup dropped extras pre-insert
   | 'outfit.worn_confirmed'
   | 'outfit.worn_inferred';
 

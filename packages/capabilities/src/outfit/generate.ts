@@ -175,8 +175,16 @@ export const generateOutfits = registerCapability({
         continue;
       }
 
-      // Compute pairing key from sorted item IDs
-      const itemIds = candidate.items.map((i) => i.closetItemId).sort();
+      // Drop role-duplicates before inserting. Mirrors the partial unique
+      // index on outfit_items (outfit_id, role) WHERE role != 'accessory'.
+      // Without this the batch insert atomically rejects the whole outfit
+      // if the AI emits two tops; with it, the first-per-role wins and
+      // generation still succeeds.
+      const dedupedItems = dedupeByRole(candidate.items);
+
+      // Compute pairing key from sorted (deduped) item IDs so identical
+      // outfits — even after dedup — still hash to the same forbidden key.
+      const itemIds = dedupedItems.map((i) => i.closetItemId).sort();
       const pairingKey = createHash('sha256')
         .update(itemIds.join('|'))
         .digest('hex')
@@ -188,7 +196,7 @@ export const generateOutfits = registerCapability({
       }
       forbiddenKeys.add(pairingKey);
 
-      // Persist the outfit + items in a transaction
+      // Persist the outfit + items
       const [outfit] = await db
         .insert(outfits)
         .values({
@@ -202,12 +210,29 @@ export const generateOutfits = registerCapability({
         .returning({ id: outfits.id });
 
       await db.insert(outfitItems).values(
-        candidate.items.map((i) => ({
+        dedupedItems.map((i) => ({
           outfitId: outfit.id,
           closetItemId: i.closetItemId,
           role: i.role,
         })),
       );
+
+      if (dedupedItems.length < candidate.items.length) {
+        const droppedRoles = candidate.items
+          .filter((_, idx) => !dedupedItems.includes(candidate.items[idx]))
+          .map((i) => i.role);
+        await logEvent({
+          userId,
+          type: 'outfit.role_duplicate_dropped',
+          source,
+          payload: {
+            outfitId: outfit.id,
+            generationId: result.provenance.generationId,
+            droppedCount: candidate.items.length - dedupedItems.length,
+            droppedRoles,
+          },
+        });
+      }
 
       savedOutfitIds.push(outfit.id);
     }
@@ -243,6 +268,34 @@ export const generateOutfits = registerCapability({
     };
   },
 });
+
+// ─── Helpers ───
+
+/**
+ * Roles that may appear multiple times in a single outfit. Everything else
+ * (top, bottom, dress, shoes, outerwear) is at-most-once per outfit. Mirrors
+ * the partial unique index on outfit_items (outfit_id, role).
+ */
+const REPEATABLE_ROLES = new Set(['accessory']);
+
+/**
+ * Keep the first occurrence of each non-repeatable role; let repeatable roles
+ * pass through unchanged. Pure function so it's testable in isolation.
+ */
+export function dedupeByRole<T extends { role: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    if (REPEATABLE_ROLES.has(item.role)) {
+      out.push(item);
+      continue;
+    }
+    if (seen.has(item.role)) continue;
+    seen.add(item.role);
+    out.push(item);
+  }
+  return out;
+}
 
 // ─── Renderers ───
 

@@ -74,9 +74,14 @@ export const sendMessage = registerCapability({
     // 1. Find or create conversation
     let resolvedConvoId: string;
     if (conversationId) {
-      // Verify ownership
+      // Verify ownership + reject admin chats (the user chat endpoint must
+      // never extend an admin chat — different model + tool catalog).
       const convo = await db.query.chatConversations.findFirst({
-        where: and(eq(chatConversations.id, conversationId), eq(chatConversations.userId, userId)),
+        where: and(
+          eq(chatConversations.id, conversationId),
+          eq(chatConversations.userId, userId),
+          eq(chatConversations.isAdminChat, false),
+        ),
       });
       if (!convo) throw new Error('Conversation not found or does not belong to user');
       resolvedConvoId = convo.id;

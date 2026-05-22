@@ -74,7 +74,11 @@ export const getConversation = registerCapability({
     const db = getDb();
 
     const convo = await db.query.chatConversations.findFirst({
-      where: and(eq(chatConversations.id, conversationId), eq(chatConversations.userId, userId)),
+      where: and(
+        eq(chatConversations.id, conversationId),
+        eq(chatConversations.userId, userId),
+        eq(chatConversations.isAdminChat, false),
+      ),
     });
     if (!convo) throw new Error('Conversation not found');
 

@@ -51,7 +51,7 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
       (SELECT count(*)::int FROM outfits o WHERE o.user_id = u.id) AS outfit_count,
       (SELECT count(*)::int FROM chat_messages m
          JOIN chat_conversations c ON c.id = m.conversation_id
-         WHERE c.user_id = u.id) AS chat_message_count,
+         WHERE c.user_id = u.id AND c.is_admin_chat = false) AS chat_message_count,
       (SELECT count(*)::int FROM generations g WHERE g.user_id = u.id) AS generation_count,
       (SELECT COALESCE(SUM(g.cost_cents), 0)::float FROM generations g WHERE g.user_id = u.id) AS spend_cents
     FROM users u
@@ -163,7 +163,7 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
       SELECT
         (SELECT count(*)::int FROM closet_items WHERE user_id = ${userId}) AS items,
         (SELECT count(*)::int FROM outfits WHERE user_id = ${userId}) AS outfits,
-        (SELECT count(*)::int FROM chat_conversations WHERE user_id = ${userId}) AS conversations,
+        (SELECT count(*)::int FROM chat_conversations WHERE user_id = ${userId} AND is_admin_chat = false) AS conversations,
         (SELECT count(*)::int FROM generations WHERE user_id = ${userId}) AS generations,
         (SELECT COALESCE(SUM(cost_cents), 0)::float FROM generations WHERE user_id = ${userId}) AS spend_cents
     `,
@@ -201,7 +201,7 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
     >`
       SELECT id, title, message_count, last_message_at, created_at
       FROM chat_conversations
-      WHERE user_id = ${userId}
+      WHERE user_id = ${userId} AND is_admin_chat = false
       ORDER BY created_at DESC
       LIMIT 20
     `,

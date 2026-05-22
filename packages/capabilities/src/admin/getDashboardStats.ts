@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { sql as drizzleSql } from 'drizzle-orm';
+import { eq, sql as drizzleSql } from 'drizzle-orm';
 import {
   getDb,
   users,
@@ -7,6 +7,7 @@ import {
   outfits,
   generations,
   chatMessages,
+  chatConversations,
 } from '@tela/db';
 import { registerCapability } from '../registry.js';
 
@@ -69,7 +70,11 @@ export const getDashboardStats = registerCapability({
       db.select({ count: drizzleSql<number>`count(*)::int` }).from(users),
       db.select({ count: drizzleSql<number>`count(*)::int` }).from(closetItems),
       db.select({ count: drizzleSql<number>`count(*)::int` }).from(outfits),
-      db.select({ count: drizzleSql<number>`count(*)::int` }).from(chatMessages),
+      db
+        .select({ count: drizzleSql<number>`count(*)::int` })
+        .from(chatMessages)
+        .innerJoin(chatConversations, eq(chatConversations.id, chatMessages.conversationId))
+        .where(eq(chatConversations.isAdminChat, false)),
       db.select({ count: drizzleSql<number>`count(*)::int` }).from(generations),
       db
         .select({

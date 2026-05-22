@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { sql as drizzleSql } from 'drizzle-orm';
+import { eq, sql as drizzleSql } from 'drizzle-orm';
 import { getDb, chatConversations, users } from '@tela/db';
 import { registerCapability } from '../registry.js';
 
@@ -78,9 +78,9 @@ export const getChatOverview = registerCapability({
     const [[statsRow], perUserRows, recentRows] = await Promise.all([
       db
         .select({
-          totalConversations: drizzleSql<number>`(SELECT count(*)::int FROM chat_conversations)`,
-          totalMessages: drizzleSql<number>`(SELECT count(*)::int FROM chat_messages)`,
-          last7dMessages: drizzleSql<number>`(SELECT count(*)::int FROM chat_messages WHERE created_at >= now() - interval '7 days')`,
+          totalConversations: drizzleSql<number>`(SELECT count(*)::int FROM chat_conversations WHERE is_admin_chat = false)`,
+          totalMessages: drizzleSql<number>`(SELECT count(*)::int FROM chat_messages m JOIN chat_conversations c ON c.id = m.conversation_id WHERE c.is_admin_chat = false)`,
+          last7dMessages: drizzleSql<number>`(SELECT count(*)::int FROM chat_messages m JOIN chat_conversations c ON c.id = m.conversation_id WHERE c.is_admin_chat = false AND m.created_at >= now() - interval '7 days')`,
           totalChatCostCents: drizzleSql<number>`COALESCE((SELECT SUM(cost_cents)::float FROM generations WHERE operation LIKE 'chat.%'), 0)`,
         })
         .from(drizzleSql`(SELECT 1) AS _`),
@@ -97,6 +97,7 @@ export const getChatOverview = registerCapability({
         })
         .from(chatConversations)
         .innerJoin(users, drizzleSql`${users.id} = ${chatConversations.userId}`)
+        .where(eq(chatConversations.isAdminChat, false))
         .groupBy(users.id, users.email, users.displayName)
         .orderBy(drizzleSql`COALESCE((SELECT SUM(cost_cents)::float FROM generations WHERE user_id = ${users.id} AND operation LIKE 'chat.%'), 0) DESC, count(${chatConversations.id}) DESC`),
 
@@ -114,6 +115,7 @@ export const getChatOverview = registerCapability({
         })
         .from(chatConversations)
         .innerJoin(users, drizzleSql`${users.id} = ${chatConversations.userId}`)
+        .where(eq(chatConversations.isAdminChat, false))
         .orderBy(drizzleSql`${chatConversations.lastMessageAt} DESC NULLS LAST`)
         .limit(recentLimit),
     ]);

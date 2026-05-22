@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { getDb, chatConversations } from '@tela/db';
 import { registerCapability } from '../registry.js';
 import { getRequestContext } from '../context/requestContext.js';
@@ -39,7 +39,7 @@ export const listConversations = registerCapability({
         createdAt: chatConversations.createdAt,
       })
       .from(chatConversations)
-      .where(eq(chatConversations.userId, userId))
+      .where(and(eq(chatConversations.userId, userId), eq(chatConversations.isAdminChat, false)))
       .orderBy(desc(chatConversations.lastMessageAt))
       .limit(limit);
 

@@ -41,7 +41,7 @@ export async function getUserConversations(userId: string): Promise<UserConversa
       c.created_at,
       c.last_message_at
     FROM chat_conversations c
-    WHERE c.user_id = ${userId}
+    WHERE c.user_id = ${userId} AND c.is_admin_chat = false
     ORDER BY c.last_message_at DESC NULLS LAST
   `;
 

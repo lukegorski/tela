@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { eq, desc, sql as drizzleSql } from 'drizzle-orm';
+import { and, eq, desc, sql as drizzleSql } from 'drizzle-orm';
 import {
   getDb,
   users,
@@ -127,7 +127,7 @@ export const getUserDetail = registerCapability({
       db
         .select({ conversations: drizzleSql<number>`count(*)::int` })
         .from(chatConversations)
-        .where(eq(chatConversations.userId, userId)),
+        .where(and(eq(chatConversations.userId, userId), eq(chatConversations.isAdminChat, false))),
       db
         .select({
           generations: drizzleSql<number>`count(*)::int`,
@@ -168,7 +168,7 @@ export const getUserDetail = registerCapability({
           createdAt: chatConversations.createdAt,
         })
         .from(chatConversations)
-        .where(eq(chatConversations.userId, userId))
+        .where(and(eq(chatConversations.userId, userId), eq(chatConversations.isAdminChat, false)))
         .orderBy(desc(chatConversations.createdAt))
         .limit(20),
       db

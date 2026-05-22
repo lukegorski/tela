@@ -61,9 +61,9 @@ export async function getChatOverview(opts: { recentLimit?: number } = {}): Prom
       }[]
     >`
       SELECT
-        (SELECT count(*)::int FROM chat_conversations) AS total_conversations,
-        (SELECT count(*)::int FROM chat_messages) AS total_messages,
-        (SELECT count(*)::int FROM chat_messages WHERE created_at >= now() - interval '7 days') AS last7d_messages,
+        (SELECT count(*)::int FROM chat_conversations WHERE is_admin_chat = false) AS total_conversations,
+        (SELECT count(*)::int FROM chat_messages m JOIN chat_conversations c ON c.id = m.conversation_id WHERE c.is_admin_chat = false) AS total_messages,
+        (SELECT count(*)::int FROM chat_messages m JOIN chat_conversations c ON c.id = m.conversation_id WHERE c.is_admin_chat = false AND m.created_at >= now() - interval '7 days') AS last7d_messages,
         COALESCE((SELECT SUM(cost_cents)::float FROM generations WHERE operation LIKE 'chat.%'), 0) AS total_chat_cost_cents
     `,
     sql<
@@ -91,6 +91,7 @@ export async function getChatOverview(opts: { recentLimit?: number } = {}): Prom
         MAX(c.last_message_at) AS last_active_at
       FROM chat_conversations c
       JOIN users u ON u.id = c.user_id
+      WHERE c.is_admin_chat = false
       GROUP BY u.id, u.email, u.display_name
       ORDER BY chat_cost_cents DESC, count(c.id) DESC
     `,
@@ -124,6 +125,7 @@ export async function getChatOverview(opts: { recentLimit?: number } = {}): Prom
         c.last_message_at
       FROM chat_conversations c
       JOIN users u ON u.id = c.user_id
+      WHERE c.is_admin_chat = false
       ORDER BY c.last_message_at DESC NULLS LAST
       LIMIT ${recentLimit}
     `,

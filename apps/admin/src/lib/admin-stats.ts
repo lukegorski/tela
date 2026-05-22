@@ -42,7 +42,12 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     sql<{ count: number }[]>`SELECT count(*)::int AS count FROM users`,
     sql<{ count: number }[]>`SELECT count(*)::int AS count FROM closet_items`,
     sql<{ count: number }[]>`SELECT count(*)::int AS count FROM outfits`,
-    sql<{ count: number }[]>`SELECT count(*)::int AS count FROM chat_messages`,
+    sql<{ count: number }[]>`
+      SELECT count(*)::int AS count
+      FROM chat_messages m
+      JOIN chat_conversations c ON c.id = m.conversation_id
+      WHERE c.is_admin_chat = false
+    `,
     sql<{ count: number }[]>`SELECT count(*)::int AS count FROM generations`,
     sql<{ cents: number; count: number }[]>`
       SELECT COALESCE(SUM(cost_cents), 0)::float AS cents, count(*)::int AS count

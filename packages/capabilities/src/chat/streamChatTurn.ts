@@ -180,6 +180,7 @@ export async function* streamChatTurn(
       where: and(
         eq(chatConversations.id, input.conversationId),
         eq(chatConversations.userId, userId),
+        eq(chatConversations.isAdminChat, false),
       ),
     });
     if (!convo) throw new Error('Conversation not found or does not belong to user');

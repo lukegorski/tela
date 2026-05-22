@@ -59,7 +59,7 @@ export const listUsers = registerCapability({
           SELECT count(*)::int
           FROM chat_messages m
           JOIN chat_conversations c ON c.id = m.conversation_id
-          WHERE c.user_id = ${users.id}
+          WHERE c.user_id = ${users.id} AND c.is_admin_chat = false
         )`,
         generationCount: drizzleSql<number>`(SELECT count(*)::int FROM generations g WHERE g.user_id = ${users.id})`,
         spendCents: drizzleSql<number>`(SELECT coalesce(sum(g.cost_cents), 0)::float FROM generations g WHERE g.user_id = ${users.id})`,

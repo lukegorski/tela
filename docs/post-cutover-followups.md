@@ -50,9 +50,19 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
 
 ## AI Quality
 
-- **Role uniqueness in outfit generation** — P1.
-  Outfit generation can produce role-duplicates (e.g., two tops in one outfit). Fix is two-part: (a) schema-level constraint preventing duplicate roles in `outfit_items`, (b) prompt update to discourage duplicates upstream. Affects every active user; one of the most common visible quality issues.
+- **Role uniqueness in outfit generation** — `[DONE 2026-05-21]`.
+  ~~Outfit generation can produce role-duplicates (e.g., two tops in one outfit). Fix is two-part: (a) schema-level constraint preventing duplicate roles in `outfit_items`, (b) prompt update to discourage duplicates upstream. Affects every active user; one of the most common visible quality issues.~~
+  Shipped as a three-layer defense. (a) Insertion-side dedup in `outfit/generate.ts` drops AI-emitted role-duplicates pre-insert, telemetered via new `outfit.role_duplicate_dropped` event. (b) Partial unique index `outfit_items_outfit_role_unique ON (outfit_id, role) WHERE role <> 'accessory'` shipped in migration `0016_outfit_items_role_unique` — `accessory` exempt because necklaces/rings/scarves legitimately repeat. (c) New `outfit.generate` prompt version `4178166d` adds an explicit Hard rule: "AT MOST ONE item per role…the only repeatable role is accessory"; markdown source `packages/prompts/templates/outfit.generate.md` updated in lockstep so future syncs preserve the change.
+  Pre-flight DB audit found zero existing duplicate-role outfit_items, so no cleanup workstream was needed. Verification script `scripts/verify-role-uniqueness.ts` ran 20 generations against Luke's wardrobe: 23 new outfits, ZERO duplicate non-accessory roles, ZERO `role_duplicate_dropped` events (prompt change is biting at the LLM level — dedup is belt-and-suspenders only). Total cost 35.25¢, avg 3.20¢/generation. Constraint-fires-correctly proven via direct psql insert test (rejected the duplicate-`top` insert; allowed the duplicate-`accessory` insert).
+  Commits: `b60e62d` (insertion dedup + outfit.role_duplicate_dropped event type — swept into the parallel 14c session's "feat(ai): Anthropic provider" commit by a `git commit -a` race; the outfit/events changes are functionally identical to what they would have been as a standalone commit), `947bece` (migration 0016 + schema partial unique index), `b64b499` (prompt template + one-shot promote script), `e8a5a5c` (verify-role-uniqueness harness).
   *Origin*: Phase 11 deployment session summary (data quality issues in migrated user accounts).
+
+- **Dress + (top|bottom) mutual exclusion** — audit complete, no follow-up needed (2026-05-21).
+  Pre-flight P2 audit of the role-uniqueness session checked for outfits that contain a `dress` AND a `top` or `bottom`. Result: ZERO across 37 outfits in dev DB. The existing prompt phrasing "(top OR dress) AND (bottom OR dress) AND shoes" appears to be enough — the AI consistently treats dress as a top+bottom substitute rather than additive. Re-audit if visible regressions surface.
+
+- **Upgrade `outfit.generate` to OpenAI structured outputs** — P2.
+  Today `outfit.generate` calls the AI gateway with `responseFormat: 'json'` — that's OpenAI's `json_object` mode (free-form JSON, schema enforced after the fact via zod). OpenAI also supports `response_format: { type: 'json_schema', schema: {...} }`, which constrains the model's sampling to the schema at generation time. Upgrading would let us express role-uniqueness (and item-id-from-set-X constraints, count constraints, etc.) structurally in one place, replacing the current three-layer prompt+dedup+constraint defense with one upstream guardrail. Refactor scope: `packages/ai/src/providers/openai.ts` would need a new `responseFormat: 'json_schema'` branch, and each capability that opts in (`outfit.generate`, `item.analyze`, potentially others) supplies a JSON Schema alongside its zod schema. Worth doing once we have ≥2 capabilities that would benefit; YAGNI for a single user right now.
+  *Origin*: surfaced during the role-uniqueness session 2026-05-21 — was considered as a fix path, deferred because the three-layer defense is sufficient and the structured-outputs refactor is broader than this bug warranted.
 
 - **Try-on model selection** — P1.
   Some try-on results come back with a male model, others female, regardless of the wardrobe owner's gender. Root cause unknown — could be Fashn API defaults, our `model_image_url` selection logic, or the migrated `tryOnSettings`. Investigate + fix the inconsistency.
@@ -73,9 +83,26 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
 
 ## Observability
 
-- **Sentry in `apps/web`** — P1.
-  Client-side observability gap. `apps/api` has Sentry server-side; `apps/web` does not. We're monitoring blind for browser-side issues post-cutover — if a user reports "page is broken" we have no client-side stack traces. Wire `@sentry/nextjs` into apps/web; add `SENTRY_DSN` to web's env-var allowlist on Railway.
+- **Sentry in `apps/web`** — ✅ DONE (2026-05-21).
+  `@sentry/nextjs@10.53.1` wired into apps/web. Three init files in `src/`: `instrumentation-client.ts` (Turbopack-friendly replacement for the deprecated `sentry.client.config.ts`), `instrumentation.ts` (server/edge runtime branching), `sentry.server.config.ts`, `sentry.edge.config.ts`. PII scrubbing (`src/lib/sentry-scrub.ts`) strips Supabase signed-URL tokens + tRPC bodies for chat/profile/wardrobe paths per `/privacy` lines 161-170. `global-error.tsx` reports root-level render crashes. User context attached inside `useAuth.ts` onAuthStateChange — `id` only, no email. `next.config.ts` wrapped with `withSentryConfig`. `apps/api/src/sentry.ts` gained matching `tracePropagationTargets` so chat-stream errors show as one distributed trace across web + api.
+  Build-time env vars required by Railway web service: `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`. Without `SENTRY_AUTH_TOKEN` at build, source maps don't upload and stack traces stay minified — see Doppler/Railway hand-off below.
   *Origin*: Phase 11 deployment session summary + cutover runbook.
+
+- **Sentry on `apps/admin`** — P1.
+  Same wiring + same PII scrubbing for `apps/admin`. Depends on Phase 14c complete (to avoid layout.tsx conflict). Should be the immediate-next session after 14c. Mirror of the apps/web session — estimate ~2 hours.
+  *Origin*: post-Sentry-in-web follow-up.
+
+- **`apps/api` `beforeSend` PII scrubbing** — P2.
+  apps/api Sentry has no PII scrubbing today. The `/admin/*` + capability error paths capture `Authorization` headers + signed URLs that should be scrubbed for consistency with apps/web. Mirror `apps/web/src/lib/sentry-scrub.ts` shape inside an api-side equivalent. ~1 hour.
+  *Origin*: post-Sentry-in-web follow-up — flagged while wiring apps/web.
+
+- **Sentry session replay** — P3.
+  Paid feature, deferred until users return and real bug-triage value justifies cost. Note: `@sentry/nextjs` v10 makes Replay opt-in (not in default integrations), so adding it later is a single-line change in `instrumentation-client.ts`.
+  *Origin*: post-Sentry-in-web follow-up.
+
+- **Sentry tunnel route** — P2.
+  Bypass ad blockers (uBlock Origin et al. block Sentry by default). Real concern for public audience; deferred until launch traffic exists. Configure `tunnelRoute` in `next.config.ts` `withSentryConfig` options. ~1 hour.
+  *Origin*: post-Sentry-in-web follow-up.
 
 - **Next `<Image>` warnings + Supabase signed-URL 400s in browser console** — P2.
   Two related but distinct issues fire on any signed-in page that renders wardrobe / outfit / try-on images. They pollute the browser console (obscuring real errors during triage) and degrade image performance:

@@ -22,6 +22,7 @@ export const getUserOutfits = registerCapability({
   input,
   output,
   requiresAdmin: true,
+  chatTool: true,
 
   async execute({ userId }) {
     return { outfits: await fetchRichOutfits({ userId, orderBy: 'createdAt' }) };

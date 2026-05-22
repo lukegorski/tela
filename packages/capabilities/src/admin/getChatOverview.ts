@@ -71,6 +71,7 @@ export const getChatOverview = registerCapability({
   input,
   output,
   requiresAdmin: true,
+  chatTool: true,
 
   async execute({ recentLimit }) {
     const db = getDb();

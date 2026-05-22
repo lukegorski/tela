@@ -21,6 +21,7 @@ export const getUserWardrobe = registerCapability({
   input,
   output,
   requiresAdmin: true,
+  chatTool: true,
 
   async execute({ userId }) {
     return { items: await fetchRichItems({ userId }) };

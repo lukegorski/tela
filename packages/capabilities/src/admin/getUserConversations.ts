@@ -35,6 +35,7 @@ export const getUserConversations = registerCapability({
   input,
   output,
   requiresAdmin: true,
+  chatTool: true,
 
   async execute({ userId }) {
     const db = getDb();

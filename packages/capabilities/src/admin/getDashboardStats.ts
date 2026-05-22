@@ -52,6 +52,7 @@ export const getDashboardStats = registerCapability({
   input,
   output,
   requiresAdmin: true,
+  chatTool: true,
 
   async execute() {
     const db = getDb();

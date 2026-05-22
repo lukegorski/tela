@@ -61,6 +61,7 @@ export const getActivity = registerCapability({
   input,
   output,
   requiresAdmin: true,
+  chatTool: true,
 
   async execute({ limit, before }) {
     const db = getDb();

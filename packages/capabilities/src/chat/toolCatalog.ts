@@ -20,15 +20,25 @@ import type { RegisteredCapability } from '../types.js';
 import { getRequestContext, runInContext } from '../context/requestContext.js';
 
 /**
- * Build the list of tools the chat AI can call. Filters by:
- *   - `chatTool: true` (opt-in)
- *   - NOT `requiresAdmin` (defense in depth)
+ * Build the list of tools the chat AI can call. Two modes:
+ *
+ * - Default (user chat): `chatTool && !requiresAdmin` — admin tools
+ *   filtered out for defense in depth.
+ * - With `includeAdmin: true` (admin chat, Phase 14c): `chatTool &&
+ *   requiresAdmin` — admin tools ONLY. Admin chat is for operational
+ *   queries about the system, not for using the system as a user, so
+ *   user tools stay out of the admin catalog. Curation lives at the
+ *   capability level (admin caps opt in via `chatTool: true`); we
+ *   currently expose ~14 read-tools to mirror legacy's ADMIN_AI_TOOLS
+ *   set. Write tools (create/update/delete prompt versions etc.) stay
+ *   un-flagged so the AI can't mutate stylist content without a UI.
  *
  * Idempotent / cheap — safe to call per chat turn.
  */
-export function buildToolCatalog(): ToolDef[] {
+export function buildToolCatalog(opts?: { includeAdmin?: boolean }): ToolDef[] {
+  const adminMode = opts?.includeAdmin ?? false;
   return getAllCapabilities()
-    .filter((c) => c.chatTool && !c.requiresAdmin)
+    .filter((c) => c.chatTool && (adminMode ? c.requiresAdmin : !c.requiresAdmin))
     .map(capabilityToToolDef);
 }
 

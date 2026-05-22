@@ -37,6 +37,7 @@ export const listRules = registerCapability({
   input,
   output,
   requiresAdmin: true,
+  chatTool: true,
 
   async execute({ activeOnly }) {
     const db = getDb();

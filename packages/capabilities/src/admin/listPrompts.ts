@@ -33,6 +33,7 @@ export const listPrompts = registerCapability({
   input,
   output,
   requiresAdmin: true,
+  chatTool: true,
 
   async execute() {
     const db = getDb();

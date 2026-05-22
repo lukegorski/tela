@@ -97,6 +97,7 @@ export const getUserDetail = registerCapability({
   input,
   output,
   requiresAdmin: true,
+  chatTool: true,
 
   async execute({ userId }) {
     const db = getDb();

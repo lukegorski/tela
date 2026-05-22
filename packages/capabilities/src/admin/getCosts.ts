@@ -62,6 +62,7 @@ export const getCosts = registerCapability({
   input,
   output,
   requiresAdmin: true,
+  chatTool: true,
 
   async execute({ days }) {
     const db = getDb();

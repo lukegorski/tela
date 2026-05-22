@@ -55,6 +55,7 @@ export const getConversation = registerCapability({
   input,
   output,
   requiresAdmin: true,
+  chatTool: true,
 
   async execute({ conversationId }) {
     const db = getDb();

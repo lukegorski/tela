@@ -27,6 +27,12 @@ export {
   type StreamChatInput,
 } from './chat/index.js';
 
+// Re-export admin streaming chat helper (Phase 14c) for the /admin/chat/stream endpoint
+export {
+  streamAdminChat,
+  type StreamAdminChatInput,
+} from './admin/index.js';
+
 // Re-export types
 export type { Capability, RegisteredCapability } from './types.js';
 

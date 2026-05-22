@@ -15,6 +15,7 @@ import { appRouter } from './trpc/router.js';
 import { createContext } from './trpc/context.js';
 import { mountCostDashboard } from './admin/costs.js';
 import { mountChatStream } from './chatStream.js';
+import { mountAdminChatStream } from './admin/chatStream.js';
 import { closeDb } from '@tela/db';
 import { setObservabilityHooks } from '@tela/capabilities';
 import { startInProcessWorker } from './worker.js';
@@ -79,6 +80,11 @@ mountCostDashboard(app);
 // SSE endpoint for streaming chat (Phase 9.2). Bearer-token auth, separate
 // from tRPC because tRPC mutations don't natively stream.
 mountChatStream(app);
+
+// SSE endpoint for streaming admin chat (Phase 14c). Bearer-token auth +
+// is_admin gate. Same wire format as /chat/stream so the AdminAiChat UI
+// can reuse rendering logic.
+mountAdminChatStream(app);
 
 // Mount tRPC
 app.use(

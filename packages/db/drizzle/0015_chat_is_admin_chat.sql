@@ -1,0 +1,2 @@
+ALTER TABLE "chat_conversations" ADD COLUMN "is_admin_chat" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE INDEX "chat_conversations_is_admin_chat_idx" ON "chat_conversations" USING btree ("is_admin_chat") WHERE is_admin_chat = true;

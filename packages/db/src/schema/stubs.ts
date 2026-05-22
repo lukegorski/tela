@@ -3,7 +3,8 @@
  * Originally stubs; chat is now real (Phase 8.7), try_on + translations
  * still minimal until their respective phases.
  */
-import { pgTable, uuid, timestamp, varchar, text, jsonb, integer, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, timestamp, varchar, text, jsonb, integer, index, boolean } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { users } from './users.js';
 import { outfits } from './outfits.js';
 
@@ -22,10 +23,17 @@ export const chatConversations = pgTable(
     messageCount: integer('message_count').notNull().default(0),
     /** Last assistant or user message timestamp — for sorting conversations */
     lastMessageAt: timestamp('last_message_at', { withTimezone: true }),
+    /** Admin AI chat marker (Phase 14c). User-facing + per-user admin queries filter on this. */
+    isAdminChat: boolean('is_admin_chat').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('chat_conversations_user_id_idx').on(table.userId)],
+  (table) => [
+    index('chat_conversations_user_id_idx').on(table.userId),
+    index('chat_conversations_is_admin_chat_idx')
+      .on(table.isAdminChat)
+      .where(sql`is_admin_chat = true`),
+  ],
 );
 
 /**

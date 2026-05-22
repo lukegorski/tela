@@ -41,6 +41,9 @@ importers:
       '@tela/api':
         specifier: workspace:*
         version: link:../api
+      '@tela/capabilities':
+        specifier: workspace:*
+        version: link:../../packages/capabilities
       '@tela/db':
         specifier: workspace:*
         version: link:../../packages/db

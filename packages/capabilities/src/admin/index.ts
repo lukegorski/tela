@@ -20,3 +20,8 @@ export { rollbackPrompt } from './rollbackPrompt.js';
 export { getCosts } from './getCosts.js';
 export { listUsers } from './listUsers.js';
 export { getUserDetail } from './getUserDetail.js';
+export { getActivity } from './getActivity.js';
+export { getUserChats } from './getUserChats.js';
+export { getUserCostsReport } from './getUserCostsReport.js';
+export { getUserWardrobe } from './getUserWardrobe.js';
+export { getUserOutfits } from './getUserOutfits.js';

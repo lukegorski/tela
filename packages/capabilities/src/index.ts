@@ -30,6 +30,15 @@ export {
 // Re-export types
 export type { Capability, RegisteredCapability } from './types.js';
 
+// Re-export shared rich-shape fetchers + schemas for callers (e.g. admin RSC
+// lib helpers) that need them outside the capability-call path.
+export { fetchRichItems, richItemSchema, type RichItem } from './wardrobe/itemShape.js';
+export {
+  fetchRichOutfits,
+  richOutfitSchema,
+  type RichOutfit,
+} from './outfit/outfitShape.js';
+
 // Re-export request context for entry points (tRPC, MCP, workers, scripts)
 export {
   runInContext,

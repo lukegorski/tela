@@ -106,6 +106,22 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
   `packages/capabilities/scripts/migrate-user-from-legacy.ts:566` promises "style profile will regenerate on first generate." That's actually true now thanks to the lazy-init in commit `25779f5`, but the wording predates the fix and could be clearer. Update to reflect the verified behavior.
   *Origin*: phase-11 cutover runbook.
 
+## Admin Tooling
+
+Items surfaced during Phase 14b parity work and the chat-dashboard redesign. Phase 14c (AdminAiChat + DNS cut) is a tracked workstream, not a follow-up — see [`phase-14-admin-parity.md`](./phase-14-admin-parity.md).
+
+- **Chat overview correlated-subquery scaling** — P3.
+  `admin-chat-overview.ts` computes per-user chat cost and per-conversation cost via correlated subqueries (one aggregation per output row). Cheap at current scale (2 conversations) but the cost-per-conversation subquery runs once per row in the recent-conversations feed (capped at 20) and the per-user chat-cost subquery runs once per user-with-chats. When conversation volume reaches the low hundreds, rewrite as a single left-join + group-by on `chat_messages` → `generations` so the planner does one pass. Same shape applies to `admin-user-conversations.ts`.
+  *Origin*: noted during Phase 14b chat-dashboard redesign self-critique.
+
+- **Full-text search across chat messages** — P2.
+  Once chat volume grows past ~50 conversations, the "recent 20" feed isn't enough — admin will want "find all conversations mentioning returns" or "users complaining about try-on quality." Add a Postgres `tsvector` index on `chat_messages.content`, a `messages.search?q=...` capability, and a search box on `/admin/chat`. Skipped in 14b chat redesign as YAGNI at current scale.
+  *Origin*: noted during Phase 14b chat-dashboard redesign self-critique.
+
+- **Chat quality signals** — P2.
+  Real admin value when the user base grows: tool-call failure rate per user, conversations with N+ assistant turns and no user reply (frustrated drop-off signal), per-user spend trajectory (week-over-week chat cost change), hallucination flags (assistant message with no tool call mentioning items not in the user's wardrobe). Each is a focused aggregation on top of `chat_messages` + `chat_messages.tool_calls`. Most are cheap to add once there's enough signal to act on (>10 active chat users).
+  *Origin*: noted during Phase 14b chat-dashboard redesign self-critique.
+
 ## UI Polish
 
 - **Visual polish pass on `apps/admin` (Phase 14a Option B)** — P2.

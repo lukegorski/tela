@@ -107,7 +107,7 @@ export async function getPromptDetail(name: string): Promise<PromptDetail | null
       template: v.template,
       variables: (v.variables as string[]) ?? [],
       changelog: v.changelog,
-      createdAt: v.created_at.toISOString(),
+      createdAt: new Date(v.created_at as string | Date).toISOString(),
       isLatest: v.id === p.latest_version_id,
     })),
   };

@@ -55,6 +55,16 @@ type ChatEvent =
   | 'chat.conversation_started'
   | 'chat.conversation_summarized';
 
+// Admin chat domain (Phase 14c — cofounder/admin AI assistant surface)
+// Mirrors ChatEvent for the admin surface; namespaced separately so the
+// activity feed and per-user dashboards don't conflate user-chat volume
+// with admin-chat volume.
+type AdminChatEvent =
+  | 'admin.chat.conversation_started'
+  | 'admin.chat.message_sent'
+  | 'admin.chat.message_received'
+  | 'admin.chat.tool_invoked';
+
 // Enhancement domain (deferred)
 type EnhancementEvent =
   | 'enhancement.started'
@@ -76,6 +86,7 @@ export type EventType =
   | FeedbackEvent
   | AIEvent
   | ChatEvent
+  | AdminChatEvent
   | EnhancementEvent
   | TryOnEvent
   | AuthEvent;

@@ -27,3 +27,5 @@ export { getUserOutfits } from './getUserOutfits.js';
 export { getChatOverview } from './getChatOverview.js';
 export { getConversation } from './getConversation.js';
 export { getUserConversations } from './getUserConversations.js';
+export { listAdminChats } from './listAdminChats.js';
+export { streamAdminChat, type StreamAdminChatInput } from './streamAdminChat.js';

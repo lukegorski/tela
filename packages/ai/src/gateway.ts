@@ -11,9 +11,11 @@ import type {
 } from './types.js';
 import { calculateCost } from './pricing.js';
 import { OpenAIProvider } from './providers/openai.js';
+import { AnthropicProvider } from './providers/anthropic.js';
 import { checkRateLimitsBeforeCall, checkRateLimitsAfterCall } from './rateLimits.js';
 
 let _provider: AIProvider | null = null;
+let _anthropicProvider: AIProvider | null = null;
 
 /**
  * Set the AI provider. Call this once during application startup.
@@ -32,11 +34,39 @@ export function initDefaultProvider(): void {
   _provider = new OpenAIProvider(apiKey);
 }
 
+/**
+ * Initialize the Anthropic provider from environment. Lazy-called on first
+ * Anthropic request so apps that never use Claude (e.g. apps/web) don't
+ * require the key. Phase 14c admin chat is the first consumer.
+ */
+export function initAnthropicProvider(): void {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY environment variable is required');
+  _anthropicProvider = new AnthropicProvider(apiKey);
+}
+
 function getProvider(): AIProvider {
   if (!_provider) {
     initDefaultProvider();
   }
   return _provider!;
+}
+
+function getAnthropicProvider(): AIProvider {
+  if (!_anthropicProvider) {
+    initAnthropicProvider();
+  }
+  return _anthropicProvider!;
+}
+
+/**
+ * Resolve the provider for a multi-turn call. Defaults to the global
+ * (OpenAI for now); admin chat passes `provider: 'anthropic'` to opt in.
+ * Explicit, not model-prefix-based — robust against future model families.
+ */
+function resolveMultiTurnProvider(provider?: 'openai' | 'anthropic'): AIProvider {
+  if (provider === 'anthropic') return getAnthropicProvider();
+  return getProvider();
 }
 
 export interface GatewayCallParams {
@@ -178,6 +208,13 @@ export interface GatewayMultiTurnParams {
   model: string;
   temperature?: number;
   maxTokens?: number;
+  /**
+   * Which provider implementation to call. Defaults to the global
+   * (OpenAI). Admin chat passes 'anthropic' to opt into Claude.
+   * Explicit by design — model-prefix detection is fragile against
+   * future families (OpenAI's o-series, Anthropic's claude-haiku, etc.).
+   */
+  provider?: 'openai' | 'anthropic';
 }
 
 export interface GatewayMultiTurnResult {
@@ -195,7 +232,7 @@ export interface GatewayMultiTurnResult {
 export async function callMulti(params: GatewayMultiTurnParams): Promise<GatewayMultiTurnResult> {
   await checkRateLimitsBeforeCall(params.userId, params.operation);
 
-  const provider = getProvider();
+  const provider = resolveMultiTurnProvider(params.provider);
   if (!provider.chatMulti) {
     throw new Error('Configured AI provider does not support multi-turn / tool calls');
   }
@@ -286,6 +323,8 @@ export interface GatewayStreamParams {
   model: string;
   temperature?: number;
   maxTokens?: number;
+  /** See GatewayMultiTurnParams.provider — same semantics. */
+  provider?: 'openai' | 'anthropic';
 }
 
 /**
@@ -306,7 +345,7 @@ export async function* callMultiStream(
 ): AsyncGenerator<StreamEvent, AICallProvenance, unknown> {
   await checkRateLimitsBeforeCall(params.userId, params.operation);
 
-  const provider = getProvider();
+  const provider = resolveMultiTurnProvider(params.provider);
   if (!provider.chatMultiStream) {
     throw new Error('Configured AI provider does not support streaming');
   }

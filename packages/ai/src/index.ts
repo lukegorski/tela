@@ -5,6 +5,7 @@ export {
   image,
   setProvider,
   initDefaultProvider,
+  initAnthropicProvider,
   type GatewayCallParams,
   type GatewayMultiTurnParams,
   type GatewayMultiTurnResult,
@@ -33,6 +34,7 @@ export type {
   StreamEvent,
 } from './types.js';
 export { OpenAIProvider } from './providers/openai.js';
+export { AnthropicProvider } from './providers/anthropic.js';
 export { MockProvider } from './providers/mock.js';
 export {
   startTryOn,

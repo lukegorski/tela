@@ -7,6 +7,8 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
   'gpt-5.4-mini': { inputCostPer1k: 0.075, outputCostPer1k: 0.45 },
   'gpt-5.4': { inputCostPer1k: 0.25, outputCostPer1k: 1.5 },
   'gpt-image-1.5': { inputCostPer1k: 0, outputCostPer1k: 5.0 },
+  // Claude Sonnet 4: $3.00 / MTok input, $15.00 / MTok output → 0.3¢ / 1.5¢ per 1k tokens.
+  'claude-sonnet-4-20250514': { inputCostPer1k: 0.3, outputCostPer1k: 1.5 },
 };
 
 /**

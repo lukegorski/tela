@@ -19,6 +19,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.82.0",
     "@tela/config": "workspace:*",
     "@tela/db": "workspace:*",
     "@tela/types": "workspace:*",

@@ -8,7 +8,9 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { users } from './users.js';
 import { closetItems } from './wardrobe.js';
 
@@ -79,13 +81,26 @@ export const outfits = pgTable(
   ],
 );
 
-export const outfitItems = pgTable('outfit_items', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  outfitId: uuid('outfit_id')
-    .notNull()
-    .references(() => outfits.id, { onDelete: 'cascade' }),
-  closetItemId: uuid('closet_item_id')
-    .notNull()
-    .references(() => closetItems.id, { onDelete: 'cascade' }),
-  role: varchar('role', { length: 20 }).notNull(),
-});
+export const outfitItems = pgTable(
+  'outfit_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    outfitId: uuid('outfit_id')
+      .notNull()
+      .references(() => outfits.id, { onDelete: 'cascade' }),
+    closetItemId: uuid('closet_item_id')
+      .notNull()
+      .references(() => closetItems.id, { onDelete: 'cascade' }),
+    role: varchar('role', { length: 20 }).notNull(),
+  },
+  (table) => [
+    // At-most-one item per role per outfit, except 'accessory' which is
+    // legitimately repeatable (multiple necklaces, rings, scarves). Belt-
+    // and-suspenders alongside the application-layer dedup in
+    // outfit/generate.ts — the dedup catches AI dupes pre-insert; this
+    // constraint stops any code path that bypasses it.
+    uniqueIndex('outfit_items_outfit_role_unique')
+      .on(table.outfitId, table.role)
+      .where(sql`role <> 'accessory'`),
+  ],
+);

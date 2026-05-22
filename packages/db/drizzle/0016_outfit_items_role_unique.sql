@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "outfit_items_outfit_role_unique" ON "outfit_items" USING btree ("outfit_id","role") WHERE role <> 'accessory';

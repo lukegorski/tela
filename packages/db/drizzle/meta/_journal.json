@@ -113,6 +113,13 @@
       "when": 1779416930170,
       "tag": "0015_chat_is_admin_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1779417340272,
+      "tag": "0016_outfit_items_role_unique",
+      "breakpoints": true
     }
   ]
 }

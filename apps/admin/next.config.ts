@@ -10,6 +10,17 @@ const config: NextConfig = {
   experimental: {
     externalDir: true,
   },
+  // Expose the build-time commit SHA to client bundles as
+  // NEXT_PUBLIC_SENTRY_RELEASE. Sentry's withSentryConfig sets `release.name`
+  // for build-time source-map upload association, but does NOT inject a
+  // runtime `release` value into the SDK under Turbopack — the webpack-plugin
+  // global injection (globalThis.SENTRY_RELEASE) doesn't fire, so client
+  // events land with `release: null`. Inlining the value here lets
+  // Sentry.init({ release: process.env.NEXT_PUBLIC_SENTRY_RELEASE }) in
+  // instrumentation-client.ts attach the tag to every browser event.
+  env: {
+    NEXT_PUBLIC_SENTRY_RELEASE: process.env.RAILWAY_GIT_COMMIT_SHA ?? '',
+  },
   images: {
     remotePatterns: [
       {

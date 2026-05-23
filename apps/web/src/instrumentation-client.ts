@@ -35,6 +35,12 @@ Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   environment: process.env.NODE_ENV ?? 'development',
   enabled: process.env.NODE_ENV === 'production',
+  // Read NEXT_PUBLIC_SENTRY_RELEASE inlined by next.config.ts from
+  // RAILWAY_GIT_COMMIT_SHA at build time. withSentryConfig's release.name
+  // option only governs source-map upload association — under Turbopack the
+  // SDK's auto-injected globalThis.SENTRY_RELEASE never fires, so without
+  // this line every browser event lands with release: null.
+  release: process.env.NEXT_PUBLIC_SENTRY_RELEASE || undefined,
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
   tracePropagationTargets: [
     'localhost',

@@ -19,6 +19,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@sentry/node": "^9.27.0",
     "@supabase/supabase-js": "^2.104.0",
     "@tela/ai": "workspace:*",
     "@tela/config": "workspace:*",

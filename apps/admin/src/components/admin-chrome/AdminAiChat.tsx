@@ -10,6 +10,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { usePathname } from 'next/navigation';
+import * as Sentry from '@sentry/nextjs';
 import { trpc } from '@/trpc/client';
 import { waitForToken } from '@/lib/auth-token-store';
 import { ClaudeIcon } from './ClaudeIcon';
@@ -509,8 +510,27 @@ export function AdminAiChat({ variant }: AdminAiChatProps) {
         }
       } catch (err) {
         const e = err as Error;
-        if (e.name === 'AbortError') {
-          // User canceled — drop the optimistic message.
+        const isAbort = e.name === 'AbortError';
+
+        // Capture in BOTH branches. There is no in-UI stop button — the only
+        // abort caller is the unmount-cleanup effect, so AbortErrors here are
+        // browser-initiated (hard refresh, navigation, tab close) and worth
+        // knowing about. Discriminate via the `abort` tag.
+        Sentry.captureException(e, {
+          tags: {
+            surface: 'AdminAiChat',
+            conversation_id: conversationId ?? 'new',
+            abort: isAbort ? 'true' : 'false',
+          },
+        });
+        // Flush before potential page unload — without this, hard-refresh
+        // races send-vs-unload and the envelope never POSTs. 2000ms is a
+        // safety margin; most flushes complete well under that.
+        await Sentry.flush(2000);
+
+        if (isAbort) {
+          // Drop the optimistic message; the request was killed by an
+          // unmount / browser teardown.
           setMessages((prev) => prev.filter((m) => m.id !== tempUserId));
         } else {
           // Common iOS Safari case: tab backgrounded mid-stream → connection

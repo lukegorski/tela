@@ -13,6 +13,7 @@
  *   strict mode), and zod-to-json-schema's default produces something
  *   compatible.
  */
+import * as Sentry from '@sentry/node';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { ToolDef } from '@tela/ai';
 import { getAllCapabilities, executeCapability } from '../registry.js';
@@ -88,6 +89,19 @@ export async function dispatchTool(
     const result = await runInContext(ctx, () => executeCapability(name, args));
     return { ok: true, result };
   } catch (err) {
+    // Capture before swallowing into the tool-result envelope. Without this,
+    // tool exceptions are invisible to Sentry — the LLM sees a graceful
+    // tool-error message and the operator never knows the tool blew up.
+    // Tagged with the tool name + RequestContext source so admin-chat vs
+    // user-chat vs MCP origin can be discriminated downstream.
+    Sentry.captureException(err, {
+      tags: {
+        tool: name,
+        source: ctx.source,
+      },
+      level: 'error',
+    });
+
     const e = err instanceof Error ? err : new Error(String(err));
     return {
       ok: false,

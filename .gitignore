@@ -31,3 +31,6 @@ pnpm-debug.log*
 
 # Test coverage
 coverage/
+
+# Claude Code local state
+.claude/scheduled_tasks.lock

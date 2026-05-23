@@ -45,6 +45,12 @@ export const listUsers = registerCapability({
   async execute() {
     const db = getDb();
 
+    // Drizzle's `${users.id}` interpolation inside a `sql` template that lives
+    // inside a SELECT projection emits the bare column name (`"id"`) — Postgres
+    // then can't disambiguate it from the subquery's local scope. Force the
+    // qualified outer-row reference with `sql.raw('users.id')`.
+    const outerUserId = drizzleSql.raw('users.id');
+
     const rows = await db
       .select({
         id: users.id,
@@ -54,16 +60,16 @@ export const listUsers = registerCapability({
         isAdmin: users.isAdmin,
         onboardingComplete: users.onboardingComplete,
         createdAt: users.createdAt,
-        itemCount: drizzleSql<number>`(SELECT count(*)::int FROM closet_items ci WHERE ci.user_id = ${users.id})`,
-        outfitCount: drizzleSql<number>`(SELECT count(*)::int FROM outfits o WHERE o.user_id = ${users.id})`,
+        itemCount: drizzleSql<number>`(SELECT count(*)::int FROM closet_items ci WHERE ci.user_id = ${outerUserId})`,
+        outfitCount: drizzleSql<number>`(SELECT count(*)::int FROM outfits o WHERE o.user_id = ${outerUserId})`,
         chatMessageCount: drizzleSql<number>`(
           SELECT count(*)::int
           FROM chat_messages m
           JOIN chat_conversations c ON c.id = m.conversation_id
-          WHERE c.user_id = ${users.id} AND c.is_admin_chat = false
+          WHERE c.user_id = ${outerUserId} AND c.is_admin_chat = false
         )`,
-        generationCount: drizzleSql<number>`(SELECT count(*)::int FROM generations g WHERE g.user_id = ${users.id})`,
-        spendCents: drizzleSql<number>`(SELECT coalesce(sum(g.cost_cents), 0)::float FROM generations g WHERE g.user_id = ${users.id})`,
+        generationCount: drizzleSql<number>`(SELECT count(*)::int FROM generations g WHERE g.user_id = ${outerUserId})`,
+        spendCents: drizzleSql<number>`(SELECT coalesce(sum(g.cost_cents), 0)::float FROM generations g WHERE g.user_id = ${outerUserId})`,
       })
       .from(users)
       .orderBy(desc(users.createdAt));

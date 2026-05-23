@@ -1,5 +1,26 @@
+import { execSync } from 'node:child_process';
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
+
+// Resolve the build commit SHA. Railway does NOT expose
+// RAILWAY_GIT_COMMIT_SHA at build time (only at Node runtime), so reading
+// the env var alone leaves NEXT_PUBLIC_SENTRY_RELEASE blank on Railway —
+// empirically verified post-deploy: deployed admin chunk showed
+// `release:void 0` in the Sentry init, and client events landed with
+// release: null. Falling back to `git rev-parse HEAD` (always available
+// in the nixpacks build container) mirrors what @sentry/cli does for its
+// own release.name auto-detection — that's why source-map upload was
+// working all along while client release tag was not.
+const SENTRY_RELEASE_SHA: string = (() => {
+  if (process.env.RAILWAY_GIT_COMMIT_SHA) return process.env.RAILWAY_GIT_COMMIT_SHA;
+  try {
+    return execSync('git rev-parse HEAD', { stdio: ['pipe', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return '';
+  }
+})();
 
 const config: NextConfig = {
   // Allow workspace packages to be transpiled (the tela monorepo dependencies)
@@ -17,7 +38,7 @@ const config: NextConfig = {
   // Sentry.init({ release: process.env.NEXT_PUBLIC_SENTRY_RELEASE }) in
   // instrumentation-client.ts attach the tag to every browser event.
   env: {
-    NEXT_PUBLIC_SENTRY_RELEASE: process.env.RAILWAY_GIT_COMMIT_SHA ?? '',
+    NEXT_PUBLIC_SENTRY_RELEASE: SENTRY_RELEASE_SHA,
   },
   images: {
     // Allow next/image to load from any Supabase Storage bucket on any
@@ -70,6 +91,6 @@ export default withSentryConfig(config, {
     },
   },
   release: {
-    name: process.env.RAILWAY_GIT_COMMIT_SHA,
+    name: SENTRY_RELEASE_SHA || undefined,
   },
 });

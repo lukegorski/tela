@@ -153,8 +153,9 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
 
 ## Tech Debt
 
-- **Three dead-code `postgres()` clients in `apps/web/src/lib/`** — P2.
-  `profile.ts`, `chat.ts`, `users.ts` each instantiate their own `postgres()` client with no callers found. They're pgbouncer-naive (no `prepare: false` per pitfall #14) so if anyone wires them up later they'll quietly regress under load. Either wire them up properly via `@tela/db`'s `getDb()` (which has the pgbouncer fix) or delete the files.
+- **Three dead-code `postgres()` clients in `apps/web/src/lib/`** — `[DONE 2026-05-22]`.
+  ~~`profile.ts`, `chat.ts`, `users.ts` each instantiate their own `postgres()` client with no callers found. They're pgbouncer-naive (no `prepare: false` per pitfall #14) so if anyone wires them up later they'll quietly regress under load. Either wire them up properly via `@tela/db`'s `getDb()` (which has the pgbouncer fix) or delete the files.~~
+  Resolved by deletion in commit `312aa78`. All three files were server-only RSC helpers scaffolded for the "RSC reads DB directly" pattern that the project never adopted (went tRPC-only). Verified zero callers via grep on both relative imports and exported function names (`getStyleProfileForUser`, `getLatestConversation`, `getAppUserByAuthId`). A fourth file — `apps/web/src/lib/admin.ts` (exports `requireAdmin` gate for `/admin` RSC routes) — was deleted in the same commit because it had zero callers itself (admin lives at `apps/admin`, not `apps/web/admin`), and was the only direct caller of `users.ts`. `pnpm verify` passes; brief dev smoke confirmed apps/web landing still renders (HTTP 200, 52KB). If anyone needs this functionality later, write it via `@tela/db`'s `getSql()`/`getDb()` which has the pgbouncer fix baked in.
   *Origin*: Phase 11 deployment session summary + cutover runbook.
 
 - **Migration script UX message** — P3.

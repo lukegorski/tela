@@ -38,17 +38,21 @@ export const listPrompts = registerCapability({
   async execute() {
     const db = getDb();
 
-    // Single SQL via Drizzle: prompts left-joined to a subquery on
-    // promptVersions for count + max(createdAt). Drizzle's group-by helper
-    // would be heavy here; keep it explicit with the SQL builder.
+    // Drizzle's `${prompts.id}` interpolation inside a `sql` template that
+    // lives inside a SELECT projection emits the bare column name (`"id"`) —
+    // Postgres then resolves it to the subquery's local `pv.id` rather than
+    // the outer `prompts.id`. Force the qualified outer-row reference with
+    // `sql.raw('prompts.id')`. (Same bug class as admin.listUsers commit f729b5e.)
+    const outerPromptId = drizzleSql.raw('prompts.id');
+
     const rows = await db
       .select({
         id: prompts.id,
         name: prompts.name,
         description: prompts.description,
         latestVersionId: prompts.latestVersionId,
-        versionCount: drizzleSql<number>`(SELECT count(*)::int FROM ${promptVersions} pv WHERE pv.prompt_id = ${prompts.id})`,
-        latestUpdatedAt: drizzleSql<Date | null>`(SELECT max(pv.created_at) FROM ${promptVersions} pv WHERE pv.prompt_id = ${prompts.id})`,
+        versionCount: drizzleSql<number>`(SELECT count(*)::int FROM ${promptVersions} pv WHERE pv.prompt_id = ${outerPromptId})`,
+        latestUpdatedAt: drizzleSql<Date | null>`(SELECT max(pv.created_at) FROM ${promptVersions} pv WHERE pv.prompt_id = ${outerPromptId})`,
       })
       .from(prompts)
       .orderBy(asc(prompts.name));

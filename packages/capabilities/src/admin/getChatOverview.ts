@@ -135,7 +135,9 @@ export const getChatOverview = registerCapability({
         conversationCount: r.conversationCount,
         messageCount: r.messageCount,
         chatCostCents: r.chatCostCents,
-        lastActiveAt: r.lastActiveAt ? r.lastActiveAt.toISOString() : null,
+        lastActiveAt: r.lastActiveAt
+          ? new Date(r.lastActiveAt as string | Date).toISOString()
+          : null,
       })),
       recentConversations: recentRows.map((r) => ({
         id: r.id,

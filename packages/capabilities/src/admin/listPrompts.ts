@@ -64,7 +64,9 @@ export const listPrompts = registerCapability({
         description: r.description,
         latestVersionId: r.latestVersionId,
         versionCount: r.versionCount,
-        latestUpdatedAt: r.latestUpdatedAt ? r.latestUpdatedAt.toISOString() : null,
+        latestUpdatedAt: r.latestUpdatedAt
+          ? new Date(r.latestUpdatedAt as string | Date).toISOString()
+          : null,
       })),
     };
   },

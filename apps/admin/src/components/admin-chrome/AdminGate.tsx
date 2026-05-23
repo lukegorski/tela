@@ -1,10 +1,13 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useAuthContext } from '@/components/AuthProvider';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { AdminLogin } from './AdminLogin';
 import { AdminNav } from './AdminNav';
+import { AdminAiPanel } from './AdminAiPanel';
+
+const AI_PANEL_KEY = 'adminAiPanelOpen';
 
 // CSR auth + admin gate. Layered on top of the server-side requireAdmin()
 // check in apps/admin/src/app/admin/layout.tsx (defense in depth). The
@@ -12,8 +15,31 @@ import { AdminNav } from './AdminNav';
 // this client gate handles the cases the server gate can't reach — the
 // root "/" page, post-login hydration, and the brief window where
 // auth.whoami is still resolving the profile.
+//
+// 14c additions: hosts the AdminAiPanel slide-out's open/closed state
+// (synced to localStorage so the choice survives nav + reload) and
+// hands the toggle handler to AdminNav's Claude button.
 export function AdminGate({ children }: { children: ReactNode }) {
   const { user, profile, loading } = useAuthContext();
+
+  // Default to open on first visit so the AI assistant is the first
+  // thing a cofounder sees. Mirrors legacy admin shell behavior.
+  const [aiPanelOpen, setAiPanelOpen] = useState(true);
+
+  useEffect(() => {
+    // SSR-safe localStorage read; sync the persisted value once on mount
+    // so the initial render doesn't flash the wrong state.
+    const stored = window.localStorage.getItem(AI_PANEL_KEY);
+    if (stored !== null) setAiPanelOpen(stored === 'true');
+  }, []);
+
+  const toggleAiPanel = useCallback(() => {
+    setAiPanelOpen((prev) => {
+      const next = !prev;
+      window.localStorage.setItem(AI_PANEL_KEY, String(next));
+      return next;
+    });
+  }, []);
 
   // Initial auth check OR signed in but profile still being fetched.
   if (loading || (user && !profile)) {
@@ -34,8 +60,9 @@ export function AdminGate({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <AdminNav />
+      <AdminNav aiPanelOpen={aiPanelOpen} onToggleAiPanel={toggleAiPanel} />
       <main className="flex-1 overflow-x-hidden">{children}</main>
+      <AdminAiPanel open={aiPanelOpen} />
     </>
   );
 }

@@ -236,15 +236,17 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
       locale: u.locale,
       isAdmin: u.is_admin,
       onboardingComplete: u.onboarding_complete,
-      createdAt: u.created_at.toISOString(),
-      updatedAt: u.updated_at.toISOString(),
+      createdAt: new Date(u.created_at as string | Date).toISOString(),
+      updatedAt: new Date(u.updated_at as string | Date).toISOString(),
     },
     styleProfile:
       profileRows.length > 0
         ? {
             id: profileRows[0].id,
             profileText: profileRows[0].profile_text,
-            updatedAt: profileRows[0].updated_at.toISOString(),
+            updatedAt: new Date(
+              profileRows[0].updated_at as string | Date,
+            ).toISOString(),
           }
         : null,
     totals: {
@@ -260,20 +262,22 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
       subcategory: i.subcategory,
       primaryColor: i.primary_color,
       description: i.description,
-      createdAt: i.created_at.toISOString(),
+      createdAt: new Date(i.created_at as string | Date).toISOString(),
     })),
     recentOutfits: outfits.map((o) => ({
       id: o.id,
       rationale: o.rationale,
       saved: o.saved,
-      createdAt: o.created_at.toISOString(),
+      createdAt: new Date(o.created_at as string | Date).toISOString(),
     })),
     recentConversations: convos.map((c) => ({
       id: c.id,
       title: c.title,
       messageCount: c.message_count,
-      lastMessageAt: c.last_message_at ? c.last_message_at.toISOString() : null,
-      createdAt: c.created_at.toISOString(),
+      lastMessageAt: c.last_message_at
+        ? new Date(c.last_message_at as string | Date).toISOString()
+        : null,
+      createdAt: new Date(c.created_at as string | Date).toISOString(),
     })),
     recentGenerations: gens.map((g) => ({
       id: g.id,
@@ -281,7 +285,7 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
       model: g.model,
       costCents: g.cost_cents,
       latencyMs: g.latency_ms,
-      createdAt: g.created_at.toISOString(),
+      createdAt: new Date(g.created_at as string | Date).toISOString(),
     })),
   };
 }

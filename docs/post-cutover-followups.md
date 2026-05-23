@@ -37,16 +37,12 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
   **Note:** branding deliverable is complete; *verification clearance* is a separate workstream tracked under "OAuth app verification (post-cutover)" because Google's "Verify branding" submission needs the URLs to resolve, which requires Phase 11 DNS cutover.
   *Origin*: Phase 11 deployment session summary.
 
-- **OAuth app verification (post-cutover)** — P2 (dependent on Phase 11 cutover completion).
-  Phase A saved the Branding fields (app name "Tela", logo, home/privacy/ToS URLs pointing at `https://telastyle.app/*`) but Google's "Verify branding" submission failed pre-cutover with two specific issues: (a) `telastyle.app` is not registered as owned by Luke in Google Search Console; (b) the home page at `https://telastyle.app/` does not include a link to the privacy policy URL — because telastyle.app is still served by the legacy Vercel app, which doesn't have the policy pages or the legal-consent line on the landing page that the new Railway service does.
+- **OAuth app verification (post-cutover)** — `[DONE 2026-05-22]`.
+  ~~Phase A saved the Branding fields (app name "Tela", logo, home/privacy/ToS URLs pointing at `https://telastyle.app/*`) but Google's "Verify branding" submission failed pre-cutover with two specific issues: (a) `telastyle.app` is not registered as owned by Luke in Google Search Console; (b) the home page at `https://telastyle.app/` does not include a link to the privacy policy URL — because telastyle.app is still served by the legacy Vercel app, which doesn't have the policy pages or the legal-consent line on the landing page that the new Railway service does.~~
 
-  Both blockers resolve at/after Phase 11 cutover. Action sequence once cutover completes:
-  1. Add `telastyle.app` as a property in [Google Search Console](https://search.google.com/search-console) (DNS TXT, HTML file, or HTML meta-tag verification — pick whichever is easiest with the DNS provider).
-  2. Re-open Google Cloud Console → Google Auth Platform → Branding → Verify branding.
-  3. Wait for Google's review (basic-scopes apps are typically reviewed within hours to ~1 day; brand verification can take longer if Google chooses to manually review).
-  4. Until verification clears, the consent screen continues to show the OAuth client's auto-computed identifier (`cyupcwfvtbfkupbdcoql.supabase.co`) instead of "Tela" + logo. Existing users who have previously consented are not re-prompted, so the visible impact is on NEW signups only.
+  Re-submitted on 2026-05-22 after Phase 11 cutover resolved both blockers (telastyle.app now served by Railway with the full landing page including the legal-consent line + privacy/ToS pages reachable). Google approved within hours — basic-scopes auto-review path, no manual brand review needed. Consent screen now shows "Tela" + logo + verified status. Removes the "Google hasn't verified this app" warning that was a real abandonment vector for re-engaged users on first sign-in.
 
-  *Origin*: Phase A execution surfaced both blockers when Luke clicked "Verify branding" pre-cutover; deferred because Google verifies against `telastyle.app/` which is still legacy until DNS cuts over.
+  *Origin*: Phase A execution surfaced two blockers pre-cutover; deferred until cutover resolved both (Search Console domain verification + privacy URL reachability via new Railway-served landing page).
 
 ## AI Quality
 

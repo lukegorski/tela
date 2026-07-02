@@ -105,7 +105,13 @@ export const generateTryOn = registerCapability({
 
     const queue = await getQueue();
     const payload: ProcessTryOnJob = { jobId: job.id, userId, outfitId };
-    await queue.send(JOB_NAMES.PROCESS_TRY_ON, payload);
+    // retryLimit pinned to 0: tryon.process re-throws pipeline failures so
+    // the worker's Sentry capture sees them, and pg-boss v11 queues default
+    // to retryLimit 2 — unpinned, each failure would be redelivered twice
+    // (no-op against the already-failed row, but the pg-boss job would then
+    // read 'completed'). Becomes a real retry policy only once failures are
+    // classified transient vs permanent.
+    await queue.send(JOB_NAMES.PROCESS_TRY_ON, payload, { retryLimit: 0 });
 
     // Note: tryon.started event is emitted by the worker when work actually
     // begins — not here at enqueue time. Keeps the event timestamp meaningful.

@@ -453,14 +453,13 @@ export const processTryOn = registerCapability({
         payload: { jobId, outfitId, error: message },
       });
 
-      // costCents reflects steps that completed before the failure — the
-      // per-step writes above already persisted the same number to the row.
-      return {
-        jobId,
-        status: 'failed' as const,
-        resultStoragePath: null,
-        costCents,
-      };
+      // Row state is settled (status='failed' written above, partial
+      // costCents already persisted by the per-step writes), so the job is
+      // terminal before the throw and a duplicate delivery no-ops via the
+      // early idempotent skip. Re-throwing is what surfaces the failure to
+      // the worker's catch — Sentry capture + pg-boss failure marking.
+      // Retries stay off via retryLimit: 0 pinned at the enqueue site.
+      throw err;
     }
   },
 });

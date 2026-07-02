@@ -66,9 +66,12 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
   Mis-diagnosed in original filing — model SELECTION logic worked correctly. Actual root cause: `man.jpg` model IMAGE was wrong file in Supabase Storage. Legacy used a Firebase-Storage-hosted `man.jpg` (`06feb4d6…`, 345KB, hands at sides) as Fashn input; `setup-models-bucket.mjs` migration uploaded the local repo's `/public/models/man.jpg` (`18e0b710…`, 291KB, hands in pockets — a Mar-26-added settings preview image, NOT the actual Fashn input). Result: new try-ons rendered against a different model figure than legacy. Fix: downloaded correct image from Firebase Storage, uploaded to Supabase Storage (overwrite), also replaced `apps/web/public/models/man.jpg` so settings preview matches Fashn input. `woman.jpg` was unaffected — identical across all three locations.
   *Origin*: Phase 11 deployment session summary; misdiagnosed wording corrected 2026-05-26.
 
-- **Try-on quality + failure handling** — P1.
-  Belt-area artifacts on try-on images (Fashn AI quality, not our code), occasional outright failures, no auto-retry on Fashn errors. Improve: add retry-with-backoff on transient Fashn errors, surface clearer failure UX, evaluate whether to swap Fashn for a higher-quality provider.
-  *Origin*: Phase 11 deployment session summary.
+- **Try-on quality + failure handling** — P1. `[IN PROGRESS 2026-05-26 — scoped into two session prompts]`
+  Belt-area artifacts on try-on images, occasional outright failures, no auto-retry on Fashn errors.
+  **2026-05-26 investigation reframed the quality portion**: a major driver is not Fashn output quality but our own MVP cut — the rebuild reduced legacy's multi-model pipeline (`tryon-v1.6` → `tryon-max` → `edit`, outfit-type-dependent: dress/standard/layered) to a single `tryon-v1.6` call, deliberately deferred per the docstring in `packages/capabilities/src/tryon/process.ts`. Restoration is scoped in [`session-prompts/tryon-pipeline-restoration.md`](./session-prompts/tryon-pipeline-restoration.md) (session spawned 2026-05-26; orchestration decided: server-side single-job with idempotent resume — legacy's client-orchestrated `/advance` split was a Vercel-timeout workaround we don't need on Railway).
+  **Failure handling** (Sentry capture gap — try-on failures currently never reach Sentry because `process.ts`'s catch swallows before the worker's capture site; transient/permanent classification; pg-boss retry with circuit breaker; partial-cost accounting) is scoped in [`session-prompts/tryon-failure-handling.md`](./session-prompts/tryon-failure-handling.md) — hard-gated on pipeline restoration shipping first (retry correctness depends on the idempotent-resume guard).
+  Provider-swap evaluation stays open after both ship.
+  *Origin*: Phase 11 deployment session summary; rescoped 2026-05-26 after man.jpg root-cause session surfaced the pipeline cut.
 
 ## Performance & Reliability
 

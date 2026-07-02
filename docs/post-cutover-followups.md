@@ -74,6 +74,10 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
   Provider-swap evaluation stays open after both ship.
   *Origin*: Phase 11 deployment session summary; rescoped 2026-05-26 after man.jpg root-cause session surfaced the pipeline cut.
 
+- **Try-on spend-cap infrastructure** — P2.
+  No spend-cap/rate-limit infra exists anywhere in the repo (`spendCap|spend_cap|dailyLimit` — zero hits, verified 2026-07-02 during the pipeline-restoration session). Try-on costs are logged per job (4/8/12¢ by outfit type: dress/standard/layered) but nothing bounds aggregate daily spend. Decision 2026-07-02: ship the restored pipeline logged-only — pre-launch traffic is tiny, and the realistic runaway scenario (provider outage × retries) is covered by the circuit breaker scoped in [`session-prompts/tryon-failure-handling.md`](./session-prompts/tryon-failure-handling.md), which is a better control than a daily cap. Revisit at real post-launch traffic; a per-user daily cap is the likely shape.
+  *Origin*: pipeline-restoration session doc required a cap-or-log decision before merge; resolved logged-only 2026-07-02.
+
 ## Performance & Reliability
 
 - **Session caching in `Provider.tsx` (getSession timeouts)** — `[DONE 2026-05-21]`.

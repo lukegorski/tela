@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import {
@@ -9,6 +10,7 @@ import {
   tryOnJobs,
   generations,
   type TryOnStatus,
+  type TryOnStep,
 } from '@tela/db';
 import {
   startTryOn,
@@ -26,6 +28,7 @@ import {
   TRY_ON_BUCKET,
 } from '../storage/supabase.js';
 import { buildFitPrompt } from './fitPrompt.js';
+import { checkFraming } from './framingCheck.js';
 import { planPipeline, sliceForResume } from './pipeline.js';
 
 const input = z.object({
@@ -95,6 +98,15 @@ const POLL_MAX_ITERATIONS = { 'tryon-v1.6': 60, 'tryon-max': 90, edit: 90 } as c
  *   Fashn call is duplicated. If the outfit's items changed between
  *   attempts, the plan is recomputed and the job restarts from the model
  *   image.
+ *
+ * Framing validation (see framingCheck.ts): outputs of the prompt-guided
+ * models (tryon-max, edit) are checked with a cheap vision call — Fashn
+ * occasionally zooms the composition in and loses the lower body, and its
+ * fixed default seed makes the bad frame reproduce on plain retry. A
+ * flagged step is re-run once with a random seed and the passing output
+ * wins. Worst case this adds one extra poll ceiling per flagged step
+ * (~180s each — still inside the 900s pg-boss expiration even if both
+ * prompt-guided steps retry).
  */
 export const processTryOn = registerCapability({
   name: 'tryon.process',
@@ -143,6 +155,13 @@ export const processTryOn = registerCapability({
     });
 
     let costCents = 0;
+    const framingLog: Array<{
+      step: TryOnStep;
+      /** null = validator unavailable (fail-open accept). */
+      feetVisible: boolean | null;
+      retried: boolean;
+      recovered?: boolean;
+    }> = [];
     try {
       // Load outfit items + photos.
       const items = await db
@@ -213,54 +232,114 @@ export const processTryOn = registerCapability({
           .where(eq(tryOnJobs.id, jobId));
 
         const garmentUrl = await signGarment(planned.item);
-        let predictionId: string;
-        switch (planned.model) {
-          case 'tryon-v1.6':
-            predictionId = await startTryOn({
-              modelImageUrl: currentImageUrl,
-              garmentImageUrl: garmentUrl,
-              category: planned.category,
-            });
-            break;
-          case 'tryon-max':
-            predictionId = await startTryOnMax({
-              modelImageUrl: currentImageUrl,
-              productImageUrl: garmentUrl,
-              prompt: buildFitPrompt(planned.item),
-            });
-            break;
-          case 'edit':
-            predictionId = await startFashnEdit({
-              imageUrl: currentImageUrl,
-              prompt: OUTERWEAR_PROMPT,
-              contextImageUrl: garmentUrl,
-            });
-            break;
-        }
 
-        await db
-          .update(tryOnJobs)
-          .set({ asyncJobId: predictionId, updatedAt: new Date() })
-          .where(eq(tryOnJobs.id, jobId));
+        // Start + poll one Fashn call for this step. Extracted so the
+        // framing retry below can re-run the identical step with an explicit
+        // seed — Fashn defaults to a FIXED seed, so a plain re-run
+        // reproduces a bad frame bit-for-bit.
+        const runStep = async (seed?: number): Promise<string> => {
+          let predictionId: string;
+          switch (planned.model) {
+            case 'tryon-v1.6':
+              predictionId = await startTryOn({
+                modelImageUrl: currentImageUrl,
+                garmentImageUrl: garmentUrl,
+                category: planned.category,
+              });
+              break;
+            case 'tryon-max':
+              predictionId = await startTryOnMax({
+                modelImageUrl: currentImageUrl,
+                productImageUrl: garmentUrl,
+                prompt: buildFitPrompt(planned.item),
+                seed,
+              });
+              break;
+            case 'edit':
+              predictionId = await startFashnEdit({
+                imageUrl: currentImageUrl,
+                prompt: OUTERWEAR_PROMPT,
+                contextImageUrl: garmentUrl,
+                seed,
+              });
+              break;
+          }
 
-        const result = await pollFashnUntilDone(predictionId, {
-          maxIterations: POLL_MAX_ITERATIONS[planned.model],
-        });
-        if (result.status !== 'completed') {
-          throw new Error(
-            `Fashn ${planned.model} step '${planned.step}' returned status '${result.status}'${
-              result.error ? `: ${result.error}` : ''
-            }`,
-          );
-        }
-        const url = extractFashnOutputUrl(result.output);
-        if (!url) {
-          throw new Error(
-            `Fashn ${planned.model} step '${planned.step}' completed without an output URL`,
-          );
-        }
-        currentImageUrl = url;
+          await db
+            .update(tryOnJobs)
+            .set({ asyncJobId: predictionId, updatedAt: new Date() })
+            .where(eq(tryOnJobs.id, jobId));
+
+          const result = await pollFashnUntilDone(predictionId, {
+            maxIterations: POLL_MAX_ITERATIONS[planned.model],
+          });
+          if (result.status !== 'completed') {
+            throw new Error(
+              `Fashn ${planned.model} step '${planned.step}' returned status '${result.status}'${
+                result.error ? `: ${result.error}` : ''
+              }`,
+            );
+          }
+          const url = extractFashnOutputUrl(result.output);
+          if (!url) {
+            throw new Error(
+              `Fashn ${planned.model} step '${planned.step}' completed without an output URL`,
+            );
+          }
+          return url;
+        };
+
+        let stepUrl = await runStep();
         costCents += FASHN_COST_CENTS_PER_CALL;
+
+        // Framing validation — prompt-guided models only (tryon-v1.6
+        // preserves the input frame; max/edit occasionally zoom in and lose
+        // the lower body). On a bad frame, retry the step ONCE with a random
+        // seed and keep the passing output. Fail-open: a null check result
+        // (validator unavailable) accepts the image as-is.
+        if (planned.model !== 'tryon-v1.6') {
+          const first = await checkFraming({ userId, imageUrl: stepUrl });
+          if (first && !first.feetVisible) {
+            await logEvent({
+              userId,
+              type: 'tryon.framing_retry',
+              source,
+              payload: {
+                jobId,
+                outfitId,
+                step: planned.step,
+                lowestVisiblePart: first.lowestVisiblePart,
+              },
+            });
+            try {
+              const retryUrl = await runStep(randomInt(1, 2 ** 31));
+              costCents += FASHN_COST_CENTS_PER_CALL;
+              const second = await checkFraming({ userId, imageUrl: retryUrl });
+              // If the re-check is unavailable, prefer the retry: the
+              // original is a KNOWN bad frame, the retry is merely unknown.
+              const recovered = second ? second.feetVisible : true;
+              if (recovered) stepUrl = retryUrl;
+              framingLog.push({ step: planned.step, feetVisible: false, retried: true, recovered });
+            } catch {
+              // Retry failed at the Fashn level — keep the original (cropped
+              // but complete) render rather than failing the whole job.
+              framingLog.push({
+                step: planned.step,
+                feetVisible: false,
+                retried: true,
+                recovered: false,
+              });
+            }
+          } else {
+            framingLog.push({
+              step: planned.step,
+              feetVisible: first ? first.feetVisible : null,
+              retried: false,
+            });
+          }
+        }
+
+        currentImageUrl = stepUrl;
 
         // Persist progress so a retried attempt resumes past this step
         // instead of re-paying for it.
@@ -322,7 +401,7 @@ export const processTryOn = registerCapability({
           resumedAtStep: resume?.step ?? null,
         },
         rawOutput: storagePath,
-        parsedOutput: { storagePath },
+        parsedOutput: { storagePath, framing: framingLog },
         latencyMs: 0,
         costCents,
       });
@@ -331,7 +410,13 @@ export const processTryOn = registerCapability({
         userId,
         type: 'tryon.completed',
         source,
-        payload: { jobId, outfitId, costCents, pipeline },
+        payload: {
+          jobId,
+          outfitId,
+          costCents,
+          pipeline,
+          framingRetries: framingLog.filter((f) => f.retried).length,
+        },
       });
 
       // Cross-check that the outfit row still exists (could have been deleted

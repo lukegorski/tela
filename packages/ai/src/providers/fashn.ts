@@ -104,6 +104,12 @@ export async function startTryOnMax(params: {
   productImageUrl: string;
   /** Natural-language fit guidance, e.g. "This is a cropped relaxed fit tee." */
   prompt: string;
+  /**
+   * Explicit sampling seed. Fashn defaults to a FIXED seed (42), so identical
+   * inputs reproduce identical outputs — pass a random seed to escape a bad
+   * deterministic result (e.g. the framing retry in tryon/process.ts).
+   */
+  seed?: number;
 }): Promise<string> {
   return startRun('tryon-max', {
     model_image: params.modelImageUrl,
@@ -111,6 +117,7 @@ export async function startTryOnMax(params: {
     prompt: params.prompt,
     resolution: '1k',
     generation_mode: 'quality',
+    seed: params.seed,
   });
 }
 
@@ -125,6 +132,8 @@ export async function startEdit(params: {
   prompt: string;
   /** The garment reference image the edit should pull from. */
   contextImageUrl: string;
+  /** Explicit sampling seed — see startTryOnMax. */
+  seed?: number;
 }): Promise<string> {
   return startRun('edit', {
     image: params.imageUrl,
@@ -132,6 +141,7 @@ export async function startEdit(params: {
     image_context: params.contextImageUrl,
     resolution: '1k',
     generation_mode: 'quality',
+    seed: params.seed,
   });
 }
 

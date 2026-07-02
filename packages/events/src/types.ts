@@ -72,8 +72,15 @@ type EnhancementEvent =
   | 'enhancement.retry'
   | 'enhancement.failed';
 
-// Try-on domain (deferred)
-type TryOnEvent = 'tryon.started' | 'tryon.step_completed' | 'tryon.completed' | 'tryon.failed';
+// Try-on domain
+type TryOnEvent =
+  | 'tryon.started'
+  | 'tryon.step_completed'
+  | 'tryon.completed'
+  | 'tryon.failed'
+  // A prompt-guided step produced a zoomed/cropped frame and was re-run
+  // with a random seed (see capabilities/src/tryon/framingCheck.ts).
+  | 'tryon.framing_retry';
 
 // Auth domain
 type AuthEvent = 'auth.signed_up' | 'auth.signed_in' | 'auth.onboarding_completed';

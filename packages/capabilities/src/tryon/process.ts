@@ -274,10 +274,15 @@ export const processTryOn = registerCapability({
             maxIterations: POLL_MAX_ITERATIONS[planned.model],
           });
           if (result.status !== 'completed') {
+            const detail = result.error
+              ? `: ${
+                  typeof result.error === 'string'
+                    ? result.error
+                    : JSON.stringify(result.error).slice(0, 500)
+                }`
+              : '';
             throw new Error(
-              `Fashn ${planned.model} step '${planned.step}' returned status '${result.status}'${
-                result.error ? `: ${result.error}` : ''
-              }`,
+              `Fashn ${planned.model} step '${planned.step}' returned status '${result.status}'${detail}`,
             );
           }
           const url = extractFashnOutputUrl(result.output);

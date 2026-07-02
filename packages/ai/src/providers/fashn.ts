@@ -52,7 +52,13 @@ export interface FashnStatusResponse {
   id: string;
   status: FashnStatus;
   output?: unknown;
-  error?: string;
+  /**
+   * Live-observed 2026-07-02: an OBJECT for poll-time failures (e.g. invalid
+   * model_image URL), not the string this was originally typed as —
+   * interpolating it directly renders "[object Object]". Serialize before
+   * putting it in a message.
+   */
+  error?: unknown;
 }
 
 /** POST {base}/run for any model. Returns the Fashn prediction ID. */

@@ -63,6 +63,12 @@ Confirm `apps/api/src/worker.ts` is the active try-on worker (not `apps/workers/
 
 > **Line-number caveat:** all line references below were verified 2026-05-26, BEFORE the pipeline-restoration session rewrote `process.ts`. Re-locate every reference by code pattern, not line number. The swallow-and-return catch behavior should survive restoration (retry logic is explicitly out of restoration's scope), but confirm it did before building on that assumption.
 
+> **2026-07-02 learnings (framing-validation work, commit `358df60`) — read before designing:**
+> - **Fashn is deterministic per serving window**: `tryon-max` and `edit` default to a FIXED seed (42). Identical inputs reproduce bitwise-identical outputs within a window, but results drift ACROSS windows (their infra). Consequence for THIS session: any retry of a Fashn call intended to get a different outcome MUST pass an explicit random seed — a plain re-run reproduces the failure. `startTryOnMax`/`startEdit` already accept `seed?`; `startTryOn` (v1.6) does not yet.
+> - **Quality-failure retry already exists for framing**: `process.ts` now has a `runStep(seed?)` closure per step + a vision framing check (`framingCheck.ts`) with one reseeded retry. Slot transient/permanent ERROR classification into the same `runStep` structure — do not build a parallel mechanism.
+> - **Spend-cap infra partially exists**: the `rate_limits` table (packages/ai/src/rateLimits.ts) enforces dailyMaxCents/dailyMaxCalls/perCallMaxCents per user/capability for AI-GATEWAY calls (framing checks are covered). Fashn calls bypass it (direct fetch, cost logged post-hoc to generations under operation `tryon.generate`). If this session adds Fashn spend protection, extend that table/mechanism — do not invent a new one.
+> - **Fashn error-shape probing (Step 3) partial freebie**: Phase 0 of the restoration session observed that invalid inputs return HTTP 400 with field-level validation messages (rejected pre-billing). Content-moderation and poll-failure shapes remain unprobed.
+
 ### Sentry gap (root cause)
 
 `packages/capabilities/src/tryon/process.ts:248-273` catches all exceptions, writes `status='failed'` to the DB row, and **RETURNS** a result object with `status: 'failed'`. It does NOT re-throw.

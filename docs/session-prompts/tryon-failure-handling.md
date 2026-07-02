@@ -69,6 +69,14 @@ Confirm `apps/api/src/worker.ts` is the active try-on worker (not `apps/workers/
 > - **Spend-cap infra partially exists**: the `rate_limits` table (packages/ai/src/rateLimits.ts) enforces dailyMaxCents/dailyMaxCalls/perCallMaxCents per user/capability for AI-GATEWAY calls (framing checks are covered). Fashn calls bypass it (direct fetch, cost logged post-hoc to generations under operation `tryon.generate`). If this session adds Fashn spend protection, extend that table/mechanism — do not invent a new one.
 > - **Fashn error-shape probing (Step 3) partial freebie**: Phase 0 of the restoration session observed that invalid inputs return HTTP 400 with field-level validation messages (rejected pre-billing). Content-moderation and poll-failure shapes remain unprobed.
 
+> **2026-07-02 Phase 0 results (failure-handling session) — measurements that gated scope:**
+> - **0.1 Baseline: 0% failure rate.** `try_on_jobs` all-time: 21 jobs, every one `complete` (8 in last 30 days, all complete). Zero failed rows ever, zero stuck pending/running. The <1% gate applied → **Step 1 shipped alone (commit `5d7f931`); Steps 2–4 deferred** pending discussion with Luke. Caveat: n=21 pre-launch jobs is statistically thin — re-run the baseline query when volume grows before investing in steps 2–4.
+> - **pg-boss default CORRECTION**: installed pg-boss 11.1.2's queue-level default is `retry_limit: 2`, NOT 0 as stated under "No retry today" below. It never bit because the swallow meant pg-boss never saw failures. With Step 1's re-throw, the unpinned default would have redelivered each failure twice (a no-op against the already-failed row via the idempotent skip, but the pg-boss job would then read 'completed'). Step 1(b)'s `retryLimit: 0` pin therefore does real work. Per-send options override queue policy (verified in pg-boss source: `COALESCE("retryLimit", q.retry_limit)` at job insert).
+> - **0.2**: `tryon.generate` `force: true` skips the complete-job cache and inserts a NEW `try_on_jobs` row + enqueues — it does not re-run an existing row. The cache lookup matches `status='complete'` only, so a failed job never blocks regeneration even with `force: false`. A manual "retry" button is therefore UI-only (call `tryon.generate` again); no new mutation needed.
+> - **0.3**: `try_on_jobs.costCents` is NOT user-facing for billing: it flows to the client (`tryon.getStatus`, `outfitShape` → web `OutfitTryOn` type) but is never rendered or used in any billing/spend-cap path; admin cost dashboards read `generations.costCents`. No column split needed. Also: partial-cost persistence on failure ALREADY exists — restoration's per-step writes persist accumulated `costCents` to the row as each step completes, so Step 4(b)'s remaining gap is only the missing `generations` row for failed jobs.
+> - **0.4**: `apps/api/src/worker.ts` confirmed the sole PROCESS_TRY_ON worker (`apps/workers/` contains enhancement only). Its catch (Sentry capture + re-throw) is intact and is what Step 1's re-throw now reaches.
+> - **Adjacent exposure (out of scope, filed in followups)**: the ENHANCE_PHOTO enqueue (`confirmPhotoUpload.ts`) is unpinned and `handleEnhancementJob` re-throws, so enhancement failures already redeliver 2× today under the same queue default — accidental policy, and `enhancement.process` re-runs a failed row in full (only `complete` short-circuits).
+
 ### Sentry gap (root cause)
 
 `packages/capabilities/src/tryon/process.ts:248-273` catches all exceptions, writes `status='failed'` to the DB row, and **RETURNS** a result object with `status: 'failed'`. It does NOT re-throw.
@@ -313,11 +321,11 @@ Surface trade-offs, do not pick.
 
 ## Definition of done
 
-- [ ] Phase 0.1 baseline failure rate reported to Luke.
-- [ ] Phase 0.2 `tryon.generate` interface verified — `force` behavior documented.
-- [ ] Phase 0.3 `costCents` user-facing check done — split if needed.
-- [ ] Phase 0.4 worker location confirmed.
-- [ ] Step 1 PR merged: Sentry capture works, behavior unchanged, `retryLimit: 0` pinned.
+- [x] Phase 0.1 baseline failure rate reported to Luke. *(2026-07-02: 0% — 21 jobs all-time, all complete. Gate applied: steps 2–4 deferred.)*
+- [x] Phase 0.2 `tryon.generate` interface verified — `force` behavior documented. *(force inserts a new row; failed jobs never block; retry button = UI-only.)*
+- [x] Phase 0.3 `costCents` user-facing check done — split if needed. *(Not user-facing for billing; no split needed.)*
+- [x] Phase 0.4 worker location confirmed. *(apps/api/src/worker.ts; apps/workers is enhancement-only.)*
+- [ ] Step 1 PR merged: Sentry capture works, behavior unchanged, `retryLimit: 0` pinned. *(Code done 2026-07-02 as local commit `5d7f931` — awaiting Luke's push approval; the forced-failure Sentry verification needs the deploy.)*
 - [ ] Step 2 PR merged: `FashnError` + `classifyFashnFailure` exist with unit tests, no runtime behavior change.
 - [ ] Step 3 probe complete: comment in code documents Fashn poll-failure patterns, total API spend ≤ $0.30 and logged.
 - [ ] Step 4 PR merged: retry policy enabled, circuit breaker live, partial costs recorded, UX decisions (A/B/C above) resolved with Luke before merge.

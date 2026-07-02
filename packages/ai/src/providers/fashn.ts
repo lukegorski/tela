@@ -4,6 +4,13 @@
  * task-specific try-on service. The chat AI gateway doesn't go through
  * here.
  *
+ * Models used (one start function each — their input shapes differ):
+ *   tryon-v1.6 — standard garment try-on (startTryOn)
+ *   tryon-max  — slower, prompt-guided try-on used for tops in the layered
+ *                pipeline (startTryOnMax)
+ *   edit       — image editing with a reference image; layers outerwear
+ *                over an existing render (startEdit)
+ *
  * Endpoints used:
  *   POST {base}/run         → start a prediction, returns { id }
  *   GET  {base}/status/{id} → poll, returns { status, output } where status
@@ -48,6 +55,24 @@ export interface FashnStatusResponse {
   error?: string;
 }
 
+/** POST {base}/run for any model. Returns the Fashn prediction ID. */
+async function startRun(modelName: string, inputs: Record<string, unknown>): Promise<string> {
+  const res = await fetch(`${FASHN_BASE_URL}/run`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ model_name: modelName, inputs }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Fashn /run (${modelName}) failed (${res.status}): ${body.slice(0, 500)}`);
+  }
+
+  const data = (await res.json()) as { id?: string };
+  if (!data.id) throw new Error(`Fashn /run (${modelName}) returned no id`);
+  return data.id;
+}
+
 /**
  * Start a tryon-v1.6 prediction (the standard garment-try-on model).
  * Returns the Fashn prediction ID.
@@ -59,29 +84,55 @@ export async function startTryOn(params: {
   /** "quality" or "performance". Default "quality" — what production uses. */
   mode?: 'quality' | 'performance';
 }): Promise<string> {
-  const res = await fetch(`${FASHN_BASE_URL}/run`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({
-      model_name: 'tryon-v1.6',
-      inputs: {
-        model_image: params.modelImageUrl,
-        garment_image: params.garmentImageUrl,
-        category: params.category,
-        mode: params.mode ?? 'quality',
-        garment_photo_type: 'flat-lay',
-      },
-    }),
+  return startRun('tryon-v1.6', {
+    model_image: params.modelImageUrl,
+    garment_image: params.garmentImageUrl,
+    category: params.category,
+    mode: params.mode ?? 'quality',
+    garment_photo_type: 'flat-lay',
   });
+}
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Fashn /run failed (${res.status}): ${body.slice(0, 500)}`);
-  }
+/**
+ * Start a tryon-max prediction — the slower, higher-fidelity try-on model
+ * that accepts a natural-language prompt for fit/styling guidance (see
+ * buildFitPrompt in @tela/capabilities). Used for tops in the layered
+ * pipeline. Typically 60–90s; poll with a higher maxIterations than v1.6.
+ */
+export async function startTryOnMax(params: {
+  modelImageUrl: string;
+  productImageUrl: string;
+  /** Natural-language fit guidance, e.g. "This is a cropped relaxed fit tee." */
+  prompt: string;
+}): Promise<string> {
+  return startRun('tryon-max', {
+    model_image: params.modelImageUrl,
+    product_image: params.productImageUrl,
+    prompt: params.prompt,
+    resolution: '1k',
+    generation_mode: 'quality',
+  });
+}
 
-  const data = (await res.json()) as { id?: string };
-  if (!data.id) throw new Error('Fashn /run returned no id');
-  return data.id;
+/**
+ * Start an edit prediction — image editing with a reference garment image
+ * (image_context). Used to layer outerwear over an already-rendered outfit,
+ * which the try-on models can't do without replacing the garments underneath.
+ * Typically 60–90s; poll with a higher maxIterations than v1.6.
+ */
+export async function startEdit(params: {
+  imageUrl: string;
+  prompt: string;
+  /** The garment reference image the edit should pull from. */
+  contextImageUrl: string;
+}): Promise<string> {
+  return startRun('edit', {
+    image: params.imageUrl,
+    prompt: params.prompt,
+    image_context: params.contextImageUrl,
+    resolution: '1k',
+    generation_mode: 'quality',
+  });
 }
 
 /**

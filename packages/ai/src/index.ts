@@ -38,6 +38,8 @@ export { AnthropicProvider } from './providers/anthropic.js';
 export { MockProvider } from './providers/mock.js';
 export {
   startTryOn,
+  startTryOnMax,
+  startEdit as startFashnEdit,
   getStatus as getFashnStatus,
   extractOutputUrl as extractFashnOutputUrl,
   pollUntilDone as pollFashnUntilDone,

@@ -12,9 +12,10 @@ import {
 } from '@tela/db';
 import {
   startTryOn,
+  startTryOnMax,
+  startFashnEdit,
   pollFashnUntilDone,
   extractFashnOutputUrl,
-  type FashnCategory,
 } from '@tela/ai';
 import { logEvent } from '@tela/events';
 import { registerCapability } from '../registry.js';
@@ -24,6 +25,8 @@ import {
   ITEM_PHOTOS_BUCKET,
   TRY_ON_BUCKET,
 } from '../storage/supabase.js';
+import { buildFitPrompt } from './fitPrompt.js';
+import { planPipeline, sliceForResume } from './pipeline.js';
 
 const input = z.object({
   jobId: z.string().uuid(),
@@ -37,13 +40,30 @@ const output = z.object({
   costCents: z.number(),
 });
 
-/** Conservative per-Fashn-call cost in cents. Fashn charges ~$0.04/call. */
+/**
+ * Conservative per-Fashn-call cost in cents. Fashn charges ~$0.04/call for
+ * tryon-v1.6; tryon-max and edit list in the same order of magnitude.
+ */
 const FASHN_COST_CENTS_PER_CALL = 4;
+
+/**
+ * Ported verbatim from legacy advance/route.ts — tuned so the edit model
+ * layers the jacket without repainting the garments underneath.
+ */
+const OUTERWEAR_PROMPT =
+  "Add this open jacket over the model's current outfit. Keep the shirt underneath fully visible through the jacket opening. Do not change or remove the existing shirt or pants.";
+
+/**
+ * Poll ceilings per model (iterations × 2s interval). tryon-v1.6 usually
+ * finishes in 20–40s; tryon-max and edit are slower — legacy polled those
+ * for up to 180s, so we allow the same.
+ */
+const POLL_MAX_ITERATIONS = { 'tryon-v1.6': 60, 'tryon-max': 90, edit: 90 } as const;
 
 /**
  * Run the Fashn try-on pipeline for an already-inserted try_on_jobs row.
  *
- * Long-running (30–90s for standard pipeline). Invoked by the apps/api
+ * Long-running (30s–8min depending on pipeline). Invoked by the apps/api
  * pg-boss worker, never directly from the user-facing tRPC mutation —
  * the user-facing `tryon.generate` enqueues this and returns immediately
  * with the jobId so the client can poll `tryon.getStatus`.
@@ -51,17 +71,35 @@ const FASHN_COST_CENTS_PER_CALL = 4;
  * Status machine:
  *   pending → running → complete | failed
  *
- * Pipelines (MVP cut, same as before the async refactor):
- *   - dress (one-pieces): single Fashn call
- *   - standard (top + bottom): two sequential Fashn calls (bottoms then top)
+ * Pipelines (restored to legacy parity — outfit-type-dependent):
+ *   - dress (one-pieces): single tryon-v1.6 call. Dress wins over other
+ *     pieces: a dress + outerwear outfit renders the dress only, exactly
+ *     like legacy.
+ *   - standard (top + bottom, no outerwear): sequential tryon-v1.6 calls,
+ *     bottoms then top.
+ *   - layered (outerwear present): bottoms via tryon-v1.6, top via
+ *     tryon-max (with a buildFitPrompt guidance prompt), then outerwear
+ *     layered on via the edit model. Runs fully server-side inside this
+ *     one job — legacy's client-orchestrated /advance split was a Vercel
+ *     function-timeout workaround that doesn't apply on Railway/pg-boss
+ *     (900s job expiration vs ~480s worst-case poll ceiling).
  *
- * Layered (with outerwear) is intentionally rejected — the multi-step
- * orchestration for it lands in a later phase.
+ * Idempotent-resume contract (what makes pg-boss retries safe):
+ *   Before each Fashn call the worker writes async_step — the garment
+ *   about to be applied. After each completed step it writes
+ *   intermediate_image_url (+ accumulated cost_cents). If the worker
+ *   crashes or the job expires, the pg-boss retry finds status='running'
+ *   with async_step + intermediate_image_url set and resumes at async_step
+ *   on top of intermediate_image_url instead of re-running (and re-paying
+ *   for) completed steps. The in-flight step is re-run, so at most one
+ *   Fashn call is duplicated. If the outfit's items changed between
+ *   attempts, the plan is recomputed and the job restarts from the model
+ *   image.
  */
 export const processTryOn = registerCapability({
   name: 'tryon.process',
   description:
-    'Execute the Fashn try-on pipeline for an already-queued job. Worker-only — the user-facing tryon.generate enqueues this and returns immediately. Long-running (30–90s).',
+    'Execute the Fashn try-on pipeline for an already-queued job. Worker-only — the user-facing tryon.generate enqueues this and returns immediately. Long-running (30s–8min depending on pipeline).',
   input,
   output,
 
@@ -84,6 +122,14 @@ export const processTryOn = registerCapability({
       };
     }
 
+    // Crash/retry detection: status 'running' with a step cursor and an
+    // intermediate image means a previous attempt died mid-pipeline (worker
+    // crash or pg-boss expiration). Resume from where it left off.
+    const resume =
+      job.status === 'running' && job.asyncStep && job.intermediateImageUrl
+        ? { step: job.asyncStep, imageUrl: job.intermediateImageUrl, costCents: job.costCents }
+        : null;
+
     await db
       .update(tryOnJobs)
       .set({ status: 'running' as TryOnStatus, updatedAt: new Date() })
@@ -93,9 +139,10 @@ export const processTryOn = registerCapability({
       userId,
       type: 'tryon.started',
       source,
-      payload: { jobId, outfitId },
+      payload: { jobId, outfitId, ...(resume ? { resumedAtStep: resume.step } : {}) },
     });
 
+    let costCents = 0;
     try {
       // Load outfit items + photos.
       const items = await db
@@ -103,6 +150,9 @@ export const processTryOn = registerCapability({
           itemId: closetItems.id,
           category: closetItems.category,
           subcategory: closetItems.subcategory,
+          fit: closetItems.fit,
+          length: closetItems.length,
+          sleeveLength: closetItems.sleeveLength,
           role: outfitItems.role,
           photoStoragePath: itemPhotos.storagePath,
           enhancedStoragePath: itemPhotos.enhancedStoragePath,
@@ -114,21 +164,28 @@ export const processTryOn = registerCapability({
 
       if (items.length === 0) throw new Error('Outfit has no items');
 
-      const dress = items.find((i) => i.category === 'dress');
-      const top = items.find((i) => i.category === 'top');
-      const bottom = items.find((i) => i.category === 'bottom');
-      const outerwear = items.find((i) => i.category === 'outerwear');
+      const { pipeline, steps: plannedSteps } = planPipeline({
+        dress: items.find((i) => i.category === 'dress'),
+        top: items.find((i) => i.category === 'top'),
+        bottom: items.find((i) => i.category === 'bottom'),
+        outerwear: items.find((i) => i.category === 'outerwear'),
+      });
+      if (plannedSteps.length === 0) throw new Error('Outfit has no try-on-able pieces');
 
-      if (outerwear) {
-        throw new Error(
-          'Layered outfits (with outerwear) are not yet supported. Phase 10.7+.',
-        );
+      // The model image was chosen at enqueue time and stored on the job.
+      let currentImageUrl = job.modelImageUrl;
+      let steps = plannedSteps;
+      if (resume) {
+        const remaining = sliceForResume(plannedSteps, resume.step);
+        if (remaining) {
+          steps = remaining;
+          currentImageUrl = resume.imageUrl;
+          costCents = resume.costCents;
+        }
+        // else: the outfit's items changed since the crashed attempt — the
+        // stale intermediate image is discarded and the new plan runs in
+        // full from the model image.
       }
-
-      let pipeline: 'dress' | 'standard';
-      if (dress) pipeline = 'dress';
-      else if (top || bottom) pipeline = 'standard';
-      else throw new Error('Outfit has no try-on-able pieces');
 
       const supabase = getSupabaseAdmin();
       const ttlSeconds = 3600;
@@ -146,35 +203,76 @@ export const processTryOn = registerCapability({
         return data.signedUrl;
       }
 
-      // The model image was chosen at enqueue time and stored on the job.
-      let currentImageUrl = job.modelImageUrl;
-      let costCents = 0;
+      for (const planned of steps) {
+        // Advance the resume cursor BEFORE the Fashn call: a crash anywhere
+        // in this iteration resumes at this step, on top of the last
+        // completed step's intermediate image.
+        await db
+          .update(tryOnJobs)
+          .set({ asyncStep: planned.step, asyncJobId: null, updatedAt: new Date() })
+          .where(eq(tryOnJobs.id, jobId));
 
-      async function runStep(garmentUrl: string, category: FashnCategory): Promise<void> {
-        const predictionId = await startTryOn({
-          modelImageUrl: currentImageUrl,
-          garmentImageUrl: garmentUrl,
-          category,
+        const garmentUrl = await signGarment(planned.item);
+        let predictionId: string;
+        switch (planned.model) {
+          case 'tryon-v1.6':
+            predictionId = await startTryOn({
+              modelImageUrl: currentImageUrl,
+              garmentImageUrl: garmentUrl,
+              category: planned.category,
+            });
+            break;
+          case 'tryon-max':
+            predictionId = await startTryOnMax({
+              modelImageUrl: currentImageUrl,
+              productImageUrl: garmentUrl,
+              prompt: buildFitPrompt(planned.item),
+            });
+            break;
+          case 'edit':
+            predictionId = await startFashnEdit({
+              imageUrl: currentImageUrl,
+              prompt: OUTERWEAR_PROMPT,
+              contextImageUrl: garmentUrl,
+            });
+            break;
+        }
+
+        await db
+          .update(tryOnJobs)
+          .set({ asyncJobId: predictionId, updatedAt: new Date() })
+          .where(eq(tryOnJobs.id, jobId));
+
+        const result = await pollFashnUntilDone(predictionId, {
+          maxIterations: POLL_MAX_ITERATIONS[planned.model],
         });
-        const result = await pollFashnUntilDone(predictionId, { maxIterations: 60 });
         if (result.status !== 'completed') {
           throw new Error(
-            `Fashn step '${category}' returned status '${result.status}'${
+            `Fashn ${planned.model} step '${planned.step}' returned status '${result.status}'${
               result.error ? `: ${result.error}` : ''
             }`,
           );
         }
         const url = extractFashnOutputUrl(result.output);
-        if (!url) throw new Error(`Fashn step '${category}' completed without an output URL`);
+        if (!url) {
+          throw new Error(
+            `Fashn ${planned.model} step '${planned.step}' completed without an output URL`,
+          );
+        }
         currentImageUrl = url;
         costCents += FASHN_COST_CENTS_PER_CALL;
-      }
 
-      if (pipeline === 'dress' && dress) {
-        await runStep(await signGarment(dress), 'one-pieces');
-      } else {
-        if (bottom) await runStep(await signGarment(bottom), 'bottoms');
-        if (top) await runStep(await signGarment(top), 'tops');
+        // Persist progress so a retried attempt resumes past this step
+        // instead of re-paying for it.
+        await db
+          .update(tryOnJobs)
+          .set({
+            intermediateImageUrl: currentImageUrl,
+            asyncJobId: null,
+            costCents,
+            updatedAt: new Date(),
+          })
+          .where(eq(tryOnJobs.id, jobId));
       }
 
       // Mirror the final image to Supabase Storage so we own a stable URL
@@ -215,8 +313,14 @@ export const processTryOn = registerCapability({
         operation: 'tryon.generate',
         promptName: 'tryon.fashn',
         promptVersionId: '00000000-0000-0000-0000-000000000000',
-        model: 'fashn:tryon-v1.6',
-        inputSnapshot: { outfitId, pipeline, jobId },
+        model: `fashn:${[...new Set(plannedSteps.map((s) => s.model))].join('+')}`,
+        inputSnapshot: {
+          outfitId,
+          pipeline,
+          jobId,
+          steps: plannedSteps.map((s) => s.step),
+          resumedAtStep: resume?.step ?? null,
+        },
         rawOutput: storagePath,
         parsedOutput: { storagePath },
         latencyMs: 0,
@@ -227,7 +331,7 @@ export const processTryOn = registerCapability({
         userId,
         type: 'tryon.completed',
         source,
-        payload: { jobId, outfitId, costCents },
+        payload: { jobId, outfitId, costCents, pipeline },
       });
 
       // Cross-check that the outfit row still exists (could have been deleted
@@ -264,11 +368,13 @@ export const processTryOn = registerCapability({
         payload: { jobId, outfitId, error: message },
       });
 
+      // costCents reflects steps that completed before the failure — the
+      // per-step writes above already persisted the same number to the row.
       return {
         jobId,
         status: 'failed' as const,
         resultStoragePath: null,
-        costCents: 0,
+        costCents,
       };
     }
   },

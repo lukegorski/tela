@@ -1,6 +1,7 @@
-// Try-on capabilities (Phase 10). MVP supports dress + standard
-// (top + bottom) pipelines; layered (top + bottom + outerwear) is
-// deferred until the multi-step async orchestration is built.
+// Try-on capabilities (Phase 10; multi-model pipeline restored to legacy
+// parity). Supports dress, standard (top + bottom), and layered (with
+// outerwear) pipelines — see process.ts for the pipeline shapes and the
+// idempotent-resume contract.
 
 export { generateTryOn } from './generate.js';
 export { getTryOnStatus } from './getStatus.js';

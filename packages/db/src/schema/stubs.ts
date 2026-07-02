@@ -117,9 +117,10 @@ export const chatMessages = pgTable(
 export type TryOnStatus = 'pending' | 'running' | 'complete' | 'failed';
 
 /**
- * For the layered (top + bottom + outerwear) pipeline we need to remember
- * which step the in-flight Fashn job is for. Single-shot pipelines (dress
- * or top-only or bottom-only) leave this null.
+ * The garment currently being applied — written before every Fashn call
+ * (in all pipelines) as the resume cursor for crashed/expired attempts,
+ * and cleared when the job completes. See tryon/process.ts for the
+ * idempotent-resume contract.
  */
 export type TryOnStep = 'bottoms' | 'top' | 'outerwear' | 'dress';
 

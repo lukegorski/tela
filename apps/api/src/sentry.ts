@@ -13,10 +13,21 @@ export function initSentry() {
     return;
   }
 
+  // Sampling is its own dial, decoupled from environment naming:
+  // SENTRY_TRACES_SAMPLE_RATE (0..1) overrides the per-env default of
+  // 0.1 in production / 1.0 elsewhere. Set it to 1 in Doppler when a
+  // debugging session needs every distributed trace.
+  const rateOverride = Number(process.env.SENTRY_TRACES_SAMPLE_RATE || undefined);
+  const tracesSampleRate = Number.isFinite(rateOverride)
+    ? rateOverride
+    : process.env.NODE_ENV === 'production'
+      ? 0.1
+      : 1.0;
+
   Sentry.init({
     dsn,
     environment: process.env.NODE_ENV ?? 'development',
-    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+    tracesSampleRate,
     // Propagate the `sentry-trace` + `baggage` headers on outgoing
     // requests to web + admin + browser. The matching sets live in
     // apps/web/src/instrumentation-client.ts +

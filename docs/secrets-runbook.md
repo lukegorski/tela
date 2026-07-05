@@ -26,6 +26,7 @@ Last updated: 2026-04-23 (Phase 5)
 | `SERVICE_ACCOUNT_SECRET` | Private | Validates `service_<source>:<userId>:<secret>` tokens for MCP/workers/scripts |
 | `OPENWEATHERMAP_API_KEY` | Optional | Weather in `context.assemble` |
 | `NODE_ENV`, `LOG_LEVEL`, `PORT` | Config | Runtime config |
+| `SENTRY_TRACES_SAMPLE_RATE` | Optional config | Overrides API trace sampling (default 0.1 when `NODE_ENV=production`, else 1.0); set to `1` during debugging sessions |
 
 ## Rotation procedures
 

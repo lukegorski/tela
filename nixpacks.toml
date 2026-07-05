@@ -2,7 +2,9 @@
 nixPkgs = ["nodejs_22", "pnpm-9_x"]
 
 [phases.install]
-cmds = ["pnpm install --frozen-lockfile"]
+# --no-production hard-overrides NODE_ENV=production so devDeps (tsc) survive
+# the install — same failure mode 0c4598f fixed for web/admin.
+cmds = ["pnpm install --frozen-lockfile --no-production"]
 
 [phases.build]
 cmds = ["pnpm build"]

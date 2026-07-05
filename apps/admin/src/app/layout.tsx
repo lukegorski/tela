@@ -33,6 +33,15 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+// Every route in this app is auth-gated and env-backed (Supabase client in
+// AuthProvider, DB-direct pages), so nothing here can be prerendered at
+// build time — builds must succeed with no runtime env (CI has none; only
+// Railway injects it). Without this, the implicit /_not-found route was the
+// one statically-prerendered page, and it crashed the production build
+// constructing the Supabase client. /admin/* pages declare force-dynamic
+// individually; this covers the remaining root-segment routes.
+export const dynamic = 'force-dynamic';
+
 // Synchronous theme bootstrap — applies the .dark class before paint so the
 // page never flashes light when the user prefers dark. Matches the (main)
 // layout's pattern in apps/web; keyed off the same localStorage entry so

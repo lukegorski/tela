@@ -36,6 +36,16 @@ jobs:
 
       - name: Build (workspace dependency order)
         run: pnpm build
+        env:
+          # Public client-bundle values, not secrets — they ship to the
+          # browser in production. apps/web statically prerenders auth-shell
+          # pages whose Supabase browser client throws at construction if
+          # these are absent. Placeholders keep the build hermetic: nothing
+          # contacts Supabase at build time, and any future page that tries
+          # to fetch during prerender fails loudly here instead of silently
+          # depending on a live project.
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
 
       - name: Typecheck
         run: pnpm typecheck

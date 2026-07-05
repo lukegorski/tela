@@ -80,6 +80,10 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
   ~~No spend-cap/rate-limit infra exists anywhere in the repo.~~ Correction (same day): the `rate_limits` table + `packages/ai/src/rateLimits.ts` DO enforce per-user/per-capability daily spend caps — but only for AI-gateway calls. Fashn calls bypass the gateway (direct fetch; cost logged post-hoc to `generations` under `tryon.generate`), so try-on spend is logged (4/8/12¢ by outfit type + 4¢ per framing retry) but unbounded. Decision 2026-07-02: ship logged-only — pre-launch traffic is tiny, and the runaway scenario (provider outage × retries) is covered by the circuit breaker scoped in [`session-prompts/tryon-failure-handling.md`](./session-prompts/tryon-failure-handling.md). When a cap is warranted, EXTEND the existing rate_limits mechanism to pre-check `tryon.generate` (usage data is already in `generations`) rather than building anything new.
   *Origin*: pipeline-restoration session doc required a cap-or-log decision before merge; resolved logged-only + infra correction 2026-07-02.
 
+- **Outfit item stored under wrong role (`shoes` role holding an outerwear item)** — P3.
+  Found 2026-07-02 during try-on framing diagnosis: the "NIGHT SHIFT OLIVE BALANCE" WORK outfit (`30d584c2…`) has its brown overshirt attached to `outfit_items` with `role='shoes'` while the item's `closet_items.category` is `outerwear`. Try-on was immune (planPipeline keys off item category, not role) and the web UI's pieces panel also displays by category — but role-based consumers (the role-uniqueness partial index, any future role-driven UI) see wrong data. Audit scope + root cause: `SELECT oi.role, ci.category FROM outfit_items oi JOIN closet_items ci ON ci.id = oi.closet_item_id WHERE oi.role <> ci.category AND oi.role <> 'accessory'` — if more rows exist, trace whether outfit.generate's role assignment or the insertion dedup mis-slots when the AI emits an unexpected role. ~30 min audit; fix scope depends on count.
+  *Origin*: try-on framing root-cause session 2026-07-02.
+
 ## Performance & Reliability
 
 - **Enhancement jobs silently retry 2× on failure (accidental queue default)** — P3.
@@ -157,6 +161,10 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
 - **Sentry tunnel route** — P2.
   Bypass ad blockers (uBlock Origin et al. block Sentry by default). Real concern for public audience; deferred until launch traffic exists. Configure `tunnelRoute` in `next.config.ts` `withSentryConfig` options. ~1 hour.
   *Origin*: post-Sentry-in-web follow-up.
+
+- **Railway api service reports Sentry environment=`development` + 100% tracing** — P2.
+  Surfaced during the failure-handling Step 1 canary (2026-07-05): the Railway api service runs with `NODE_ENV` unset, so `@sentry/node` tags every event `environment=development` despite serving production traffic at telastyle.app, and `tracesSampleRate` resolves to 1.0 (full tracing on every request — cost + noise at launch traffic). Fix: set `NODE_ENV=production` on the Railway api service (check web/admin services while at it), then verify events carry `environment=production` and pick a deliberate `tracesSampleRate`. Also unblocks environment-based filtering/alert rules in Sentry. ~30 min + one deploy.
+  *Origin*: failure-handling Step 1 canary verification 2026-07-05.
 
 - **Next `<Image>` warnings + Supabase signed-URL 400s in browser console** — P2.
   Two related but distinct issues fire on any signed-in page that renders wardrobe / outfit / try-on images. They pollute the browser console (obscuring real errors during triage) and degrade image performance:

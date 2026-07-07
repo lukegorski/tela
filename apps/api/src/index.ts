@@ -104,6 +104,22 @@ app.get('/health', (c) => {
     // actually targets (a Railway-side env override would show up here).
     dsn: dsn ? { host: dsn.host, projectId: dsn.projectId } : null,
     stats: sentryStats,
+    // What the ACTIVE client actually carries at runtime — if this is
+    // undefined while stats.resolvedTracesSampleRate is 0.1, the sampler
+    // is consulting a different client than the one initSentry configured.
+    clientTracesSampleRate: Sentry.getClient()?.getOptions().tracesSampleRate ?? null,
+    sdkVersion: Sentry.SDK_VERSION,
+    // Dual-SDK-copy detector: more than one version key here means two
+    // @sentry instances share this process.
+    sdkCarriers: Object.keys(
+      (globalThis as Record<string, unknown> & { __SENTRY__?: Record<string, unknown> })
+        .__SENTRY__ ?? {},
+    ),
+    // Env var NAMES only (never values): reveals Railway-side vars that
+    // Doppler doesn't show us, e.g. OTEL_* sampler overrides.
+    envKeys: Object.keys(process.env)
+      .filter((k) => /^(SENTRY_|OTEL_|NODE_OPTIONS)/.test(k))
+      .sort(),
   });
 });
 

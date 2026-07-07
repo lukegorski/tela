@@ -28,6 +28,38 @@ const output = z.object({
 });
 
 /**
+ * The admin-chats page query, exported (unregistered) so the SQL-shape
+ * regression test can pin the generated SQL. The cost subquery's outer
+ * reference uses `sql.raw` so it stays qualified even if the join is
+ * ever removed — a bare `${chatConversations.id}` interpolation only
+ * happens to qualify here because the select has a join; copied into a
+ * no-join select it emits bare `"id"` and breaks (that is exactly how
+ * admin.getUserConversations broke — Sentry TELA-API-P).
+ */
+export function buildAdminChatsQuery(db: ReturnType<typeof getDb>, limit: number, offset: number) {
+  const outerConversationId = drizzleSql.raw('chat_conversations.id');
+
+  return db
+    .select({
+      id: chatConversations.id,
+      title: chatConversations.title,
+      userId: chatConversations.userId,
+      email: users.email,
+      displayName: users.displayName,
+      messageCount: chatConversations.messageCount,
+      chatCostCents: drizzleSql<number>`COALESCE((SELECT SUM(g.cost_cents)::float FROM chat_messages m JOIN generations g ON g.id = m.generation_id WHERE m.conversation_id = ${outerConversationId}), 0)`,
+      createdAt: chatConversations.createdAt,
+      lastMessageAt: chatConversations.lastMessageAt,
+    })
+    .from(chatConversations)
+    .innerJoin(users, eq(users.id, chatConversations.userId))
+    .where(eq(chatConversations.isAdminChat, true))
+    .orderBy(drizzleSql`${chatConversations.lastMessageAt} DESC NULLS LAST`)
+    .limit(limit)
+    .offset(offset);
+}
+
+/**
  * Lists ALL admin AI chats across ALL admins (P6 lock: any admin sees
  * any admin chat). Sorted last_message_at DESC. Each row includes
  * `startedBy: { userId, email, displayName }` so the AdminAiChat
@@ -49,27 +81,8 @@ export const listAdminChats = registerCapability({
   chatTool: true,
 
   async execute({ limit, offset }) {
-    const db = getDb();
-
     // Fetch limit+1 to detect hasMore without a COUNT(*).
-    const rows = await db
-      .select({
-        id: chatConversations.id,
-        title: chatConversations.title,
-        userId: chatConversations.userId,
-        email: users.email,
-        displayName: users.displayName,
-        messageCount: chatConversations.messageCount,
-        chatCostCents: drizzleSql<number>`COALESCE((SELECT SUM(g.cost_cents)::float FROM chat_messages m JOIN generations g ON g.id = m.generation_id WHERE m.conversation_id = ${chatConversations.id}), 0)`,
-        createdAt: chatConversations.createdAt,
-        lastMessageAt: chatConversations.lastMessageAt,
-      })
-      .from(chatConversations)
-      .innerJoin(users, eq(users.id, chatConversations.userId))
-      .where(eq(chatConversations.isAdminChat, true))
-      .orderBy(drizzleSql`${chatConversations.lastMessageAt} DESC NULLS LAST`)
-      .limit(limit + 1)
-      .offset(offset);
+    const rows = await buildAdminChatsQuery(getDb(), limit + 1, offset);
 
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;

@@ -2,6 +2,19 @@ import * as Sentry from '@sentry/node';
 import { logger } from './logger.js';
 
 /**
+ * Diagnostic counters for the /health trace probe: how many envelopes of
+ * each kind the SDK has handed to its transport since boot, plus the
+ * sample rate initSentry resolved. Lets us tell "sampler dropped it" from
+ * "envelope left the SDK but never reached Sentry" on a box with no log
+ * access (Railway).
+ */
+export const sentryStats = {
+  resolvedTracesSampleRate: null as number | null,
+  transactionEnvelopes: 0,
+  errorEnvelopes: 0,
+};
+
+/**
  * Initialize Sentry error tracking.
  * Safe to call even without SENTRY_DSN — it logs a warning and continues.
  */
@@ -50,5 +63,14 @@ export function initSentry() {
     ],
   });
 
-  logger.info('Sentry initialized');
+  sentryStats.resolvedTracesSampleRate = tracesSampleRate;
+  Sentry.getClient()?.on('beforeEnvelope', (envelope) => {
+    for (const item of envelope[1] as [{ type?: string }, unknown][]) {
+      const type = item[0]?.type;
+      if (type === 'transaction') sentryStats.transactionEnvelopes++;
+      else if (type === 'event') sentryStats.errorEnvelopes++;
+    }
+  });
+
+  logger.info({ tracesSampleRate }, 'Sentry initialized');
 }

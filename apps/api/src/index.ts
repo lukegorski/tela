@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { trpcServer } from '@hono/trpc-server';
 import * as Sentry from '@sentry/node';
-import { initSentry } from './sentry.js';
+import { initSentry, sentryStats } from './sentry.js';
 import { logger } from './logger.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -84,13 +84,26 @@ app.get('/health', (c) => {
   if (c.req.header('x-tela-trace-probe') !== '1') return c.json(base);
   const span = Sentry.getActiveSpan();
   const s = span ? Sentry.spanToJSON(span) : null;
+  const dsn = Sentry.getClient()?.getDsn();
   return c.json({
     ...base,
     node: process.version,
     sentryInitialized: Sentry.isInitialized(),
     trace: s
-      ? { trace_id: s.trace_id, span_id: s.span_id, parent_span_id: s.parent_span_id ?? null }
+      ? {
+          trace_id: s.trace_id,
+          span_id: s.span_id,
+          parent_span_id: s.parent_span_id ?? null,
+          // The real sampling verdict: getActiveSpan() also returns
+          // non-recording spans, whose transactions are never exported.
+          is_recording: span?.isRecording() ?? false,
+          trace_flags: span?.spanContext().traceFlags ?? null,
+        }
       : null,
+    // Public DSN parts only — confirms which Sentry project this process
+    // actually targets (a Railway-side env override would show up here).
+    dsn: dsn ? { host: dsn.host, projectId: dsn.projectId } : null,
+    stats: sentryStats,
   });
 });
 

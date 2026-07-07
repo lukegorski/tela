@@ -85,7 +85,7 @@ These feed the beta engagement questions directly: composition depth, save rate,
 
 ## 8. Phasing → session prompts
 
-**v0 — Builder core (no render, no premium):** cutout pipeline + backfill; builder UI (4 slots + dress mode + empty states); server-side draft persistence; save as manual outfit; migrations (`outfits.source`, `outfit_drafts`, `item_photos.cutout_storage_path`); events. *Ships behind nothing — the grid gains manual outfits immediately.*
+**v0 — Builder core (no render, no premium):** cutout pipeline + backfill; builder UI (4 slots + dress mode + empty states); server-side draft persistence; save as manual outfit; migrations (`outfits.source`, `outfit_drafts`, `item_photos.cutout_storage_path`, `users.features`); events. *Ships DARK — see §8a.*
 
 **v1 — Render + premium scaffolding:** "See it on the model" wired to try-on; `combo_hash` cache; weekly quota via rate_limits; `users.plan` + admin toggle; AI gate + fake door; quota UI.
 
@@ -94,6 +94,16 @@ These feed the beta engagement questions directly: composition depth, save rate,
 **Horizon (flagged, not scheduled):** Fashn `model-create`/`model-swap` — "see it on YOU" (user's own photo as the mannequin). Likely the strongest premium anchor the product will have; revisit after beta.
 
 Each phase becomes a session prompt in `docs/session-prompts/` following the house pattern (verified context, kill switches, STOP gates, operating constraints).
+
+### 8a. Rollout — zero disruption to the current app (Luke's requirement, 2026-07-07)
+
+The current user experience must be unaffected until a deliberate, reversible flip:
+
+1. **New surface, not a replacement.** The builder lives at a new route with NO links from the existing UI. The current outfits page stays untouched throughout v0/v1. The IA change (builder becomes the outfits-page hero, "Style me" demotes to the premium button) is ONE small final commit, applied only when Luke flips.
+2. **Per-user feature flag**: `users.features` jsonb (default `{}`), admin-toggleable from the admin users page. The builder route gates SERVER-SIDE on `features.builder` — flag off means the route doesn't render even via typed URL. Rollout order: Luke → cofounder → testers. Rollback = flip the flag back; no deploy.
+3. **Additive-only data changes.** New tables + nullable columns only; nothing existing is altered or repurposed. Manual outfits appear only in their creator's own grid.
+4. **Shared-surface rules for build sessions:** (a) NO modifications to existing routes/components during v0/v1 except the final flip commit; (b) the enhancement-pipeline cutout extension must be fail-open and non-blocking — a cutout failure can never affect the existing photo-enhancement flow; (c) `outfit.generate` behavior is unchanged for all users during beta (everyone is founder-plan).
+5. **Trunk-based dark shipping.** Increments merge to main (flag off) through the normal review-then-push cadence — no long-lived feature branch, no big-bang merge. "Launch" is a flag flip.
 
 ## 9. Open questions (cofounder + Luke)
 

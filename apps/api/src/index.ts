@@ -74,9 +74,24 @@ app.use('*', cors());
 app.use('*', requestLogger);
 app.onError(errorHandler);
 
-// Health check
+// Health check. With `x-tela-trace-probe: 1` it also reports the handler's
+// active Sentry span — ground truth for whether http instrumentation is
+// live in THIS process (trace ids are non-secret; they're already shared
+// with browsers via sentry-trace headers). Lets us verify tracing on
+// Railway with plain curl, since the Sentry API token can't read events.
 app.get('/health', (c) => {
-  return c.json({ status: 'ok', timestamp: new Date().toISOString() });
+  const base = { status: 'ok', timestamp: new Date().toISOString() };
+  if (c.req.header('x-tela-trace-probe') !== '1') return c.json(base);
+  const span = Sentry.getActiveSpan();
+  const s = span ? Sentry.spanToJSON(span) : null;
+  return c.json({
+    ...base,
+    node: process.version,
+    sentryInitialized: Sentry.isInitialized(),
+    trace: s
+      ? { trace_id: s.trace_id, span_id: s.span_id, parent_span_id: s.parent_span_id ?? null }
+      : null,
+  });
 });
 
 // Read-only admin cost dashboard (HTML + JSON), service-account auth required

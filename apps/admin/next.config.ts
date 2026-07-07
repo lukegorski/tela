@@ -75,6 +75,12 @@ export default withSentryConfig(config, {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT_ADMIN,
   authToken: process.env.SENTRY_AUTH_TOKEN,
+  // Tunnel browser events through our own origin so ad blockers that
+  // block *.sentry.io don't blind us to error reports. Mirrors
+  // apps/web/next.config.ts (house convention: web/admin symmetric).
+  // Admin has no proxy/middleware, so no locale-exemption counterpart
+  // is needed here.
+  tunnelRoute: '/monitoring',
   // Quiet during local dev, verbose only in CI
   silent: !process.env.CI,
   // Drop the source maps from the final bundle after upload — we don't

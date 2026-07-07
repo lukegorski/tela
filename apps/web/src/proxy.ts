@@ -41,6 +41,11 @@ const LOCALE_EXEMPT_PREFIXES = [
   '/cookies',
   '/biometric-policy',
   '/dmca',
+  // Sentry tunnel (tunnelRoute in next.config.ts). The browser SDK
+  // POSTs envelopes here; a locale redirect would break the beforeFiles
+  // rewrite that forwards them to Sentry ingest, silently killing error
+  // reporting for ad-blocker users. Keep in sync with next.config.ts.
+  '/monitoring',
 ];
 
 export async function proxy(request: NextRequest) {

@@ -73,6 +73,16 @@ export default withSentryConfig(config, {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   authToken: process.env.SENTRY_AUTH_TOKEN,
+  // Tunnel browser events through our own origin so ad blockers that
+  // block *.sentry.io (uBlock et al.) don't blind us to beta testers'
+  // errors. Adds a beforeFiles rewrite `/monitoring?o=..&p=..` →
+  // Sentry ingest, and injects the path into the client SDK at build
+  // time (no instrumentation-client.ts change needed). Must be a fixed
+  // string (not `true`/random) because proxy.ts has to exempt the path
+  // from locale redirects — middleware runs before rewrites. Keep in
+  // sync with LOCALE_EXEMPT_PREFIXES in src/proxy.ts and with
+  // apps/admin/next.config.ts (house convention: web/admin symmetric).
+  tunnelRoute: '/monitoring',
   // Quiet during local dev, verbose only in CI
   silent: !process.env.CI,
   // Drop the source maps from the final bundle after upload — we don't

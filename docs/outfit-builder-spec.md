@@ -1,7 +1,7 @@
-# Outfit Builder — product + engineering spec (v1)
+# Outfit Builder — product + engineering spec (v2)
 
-**Status: DRAFT for Luke + cofounder review — 2026-07-07**
-**Owner thread:** outfits-page redesign (manual-first styling). Decisions below were made explicitly by Luke on 2026-07-07; do not relitigate them in build sessions.
+**Status: DRAFT for Luke + cofounder review — 2026-07-07 (v2 after adversarial self-critique, same day)**
+**Owner thread:** outfits-page redesign (manual-first styling). Decisions in §2 were made explicitly by Luke; do not relitigate them in build sessions. Items marked **SPIKE-DECIDES** are deliberately unresolved until the v-1 spike answers them with real assets on a real phone.
 
 ---
 
@@ -9,110 +9,116 @@
 
 Invert the outfits page from AI-first to **manual-first**. Users build outfits themselves by flipping through their own wardrobe items on a mannequin-style canvas. AI styling remains available but becomes the **premium** path, not the default. The feature should feel like play (paper-doll composition), never lose the user's work, and treat the photoreal try-on render as a deliberate, valuable moment rather than an ambient effect.
 
-## 2. Locked decisions (2026-07-07)
+**The central risk is NOT engineering — it's whether flipping cutouts of real wardrobe photos feels delightful and composes coherently.** The plan therefore leads with a throwaway spike (§8, v-1) before any durable infrastructure.
+
+## 2. Locked decisions (Luke, 2026-07-07)
 
 | # | Decision |
 |---|---|
 | 1 | Flipping is **instant and free**: transparent-cutout item images cycled per slot on a stylized canvas. Fashn renders are NEVER triggered by flipping. |
 | 2 | Rendering on the model is a **deliberate action** with async delivery (~1–2 min), reusing the existing try-on pipeline unchanged. |
-| 3 | **Beta premium = founder access flags, no payment infrastructure.** AI generation gets a fake-door premium gate; all beta testers get `founder` plan with everything unlocked. Payments come only after packaging is validated. |
-| 4 | **Free render quota: 7 per week as a weekly pool** (not 1/day — allow bursts). Founders/premium bypass. Implemented via the existing `rate_limits` mechanism, general setting from day one, validated against beta usage. |
+| 3 | **Beta premium = founder access, no payment infrastructure.** AI generation gets a fake-door premium gate; beta testers get founder entitlements. Payments come only after packaging is validated. |
+| 4 | **Free render quota: 7 per week as a weekly pool** (not 1/day — allow bursts). Founders/premium bypass. General setting from day one, validated against beta usage. |
 | 5 | **v1 slots: top, bottom, outerwear, shoes.** Bag / jewelry / eyewear / hat are a fast-follow (v1.1). Shoes participate in composition + saved outfit but not the render (pipeline already ignores them). |
-| 6 | **Builder state persists server-side across sessions.** Whatever the user last had assembled/scrolled is exactly what appears on reopen — on any device. No auto-loaded suggestions, no random outfits in the workspace. Remix is OUT of v1. |
+| 6 | **Builder state persists server-side across sessions.** Whatever the user last had assembled is exactly what appears on reopen — any device. No auto-loaded suggestions, no random outfits in the workspace. Remix is OUT of v1. |
+| 7 | **Zero disruption to the current app until a deliberate, reversible flip** (§8a). Everything ships dark behind a per-user flag; the outfits-page IA change is one small final commit. |
 
 ## 3. Interaction model
 
 ### Slots + canvas
-- Mobile-first single-column canvas: a stylized mannequin/silhouette backdrop with four stacked slot zones — **outerwear, top, bottom, shoes** — each rendering the currently-selected item's transparent cutout, positioned in body order.
-- Each slot is an independent horizontal carousel of that category's wardrobe items. **The centered item IS the selection** — no separate confirm step. Swiping a slot = restyling that layer.
-- Slots can be emptied (a "none" position in the carousel — outerwear and shoes especially). Outerwear "none" is first-class: most outfits have no jacket.
-- **Dress mode:** a one-piece toggle. Selecting a dress occupies top+bottom (both slot carousels collapse into one dress carousel); mirrors the existing dress-wins pipeline semantics. UI treatment needs cofounder input (see Open Questions).
-- Empty-wardrobe states: a slot whose category has zero items shows an inline "Add tops →" affordance into the wardrobe upload flow. The builder is the pull that grows wardrobes.
+- Mobile-first single-column canvas: stylized silhouette backdrop with stacked slot zones — **outerwear, top, bottom, shoes** — each rendering the selected item's transparent cutout in body order.
+- Each slot is a horizontal carousel of that category's items. Slots can be empty (a "none" position — outerwear and shoes especially; "no jacket" is a first-class state).
+- **Selection semantics — SPIKE-DECIDES.** Naive "centered item = selection" means browsing mutates the outfit (peek at one more top and your loved combo is gone, autosaved away). Candidates to probe: (a) centered-is-selected + one-step undo; (b) tap-to-lock per slot with visually distinct browse state; (c) dwell-based commitment. The spike picks whichever feels right AND protects work-in-progress.
+- **Dress handling — SPIKE-DECIDES.** Two candidate patterns, both prototyped for the cofounder (her audience is womenswear-heavy; dresses must not feel bolted on): (a) explicit one-piece toggle collapsing top+bottom; (b) dresses as a natural carousel occupying the top+bottom zone, where swiping either separates slot fluidly exits dress mode. Whichever wins must mirror the existing dress-wins pipeline semantics.
+- **Post-save draft semantics — decide in v0 design review:** after "Save," does the workspace keep the composition (risk: accidental near-duplicate saves) or clear (risk: broken "keep going from here")? Recommendation to test: keep, with the Save button disabled until the composition changes again.
+- Empty-wardrobe states: a slot with zero items shows an inline "Add tops →" affordance into the upload flow. The builder is the pull that grows wardrobes.
+
+### Composition coherence (the real hard problem)
+Stacking arbitrary cutouts must **read as an outfit**, not a collage of mismatched scales. Real wardrobe photos vary in aspect ratio, garment scale, and orientation (some garments photographed folded). Required: per-category normalization heuristics (relative width targets — e.g., top shoulder-width ≈ bottom waist-width × k — plus vertical anchor points). **Acceptance test (spike): 3 random tops × 3 random bottoms from a real closet must stack into something that reads as an outfit.** Folded/awkward source photos may need flagging or exclusion rules; the spike quantifies how common they are in real wardrobes.
 
 ### Save + render
-- **Save** requires a valid outfit: (top AND bottom) OR dress. Shoes optional but nudged (subtle prompt if missing). Saved outfits get `source='manual'`, appear in the outfits grid + lookbook exactly like AI outfits.
-- **"See it on the model"**: fires the existing `tryon.generate` on the saved outfit. Async; in-place progress states reusing the current per-step polling (`asyncStep`). Quota indicator lives on this button ("5 of 7 left this week" for free plan; hidden for founders/premium).
-- Renders show top/bottom/outerwear only; a small caption notes "garments only for now" so the missing shoes read as expected behavior, not a bug.
+- **Save** requires validity: (top AND bottom) OR dress. Shoes optional but nudged. Saved outfits get `source='manual'`, appear in grid + lookbook like AI outfits.
+- **Card representation:** at save, the client exports the composed collage (canvas snapshot) and uploads it as the outfit's card image — cheap grid rendering AND an instantly shareable artifact. (Fashn render, when it exists, becomes the card's premium alternate.)
+- **"See it on the model"**: fires existing `tryon.generate`. Async; reuses per-step polling. Quota indicator on the button ("5 of 7 left this week"); hidden for founder/premium entitlements.
+- Renders show top/bottom/outerwear only; caption "garments only for now."
 
 ### Persistence (decision #6 mechanics)
-- Single active **draft per user**, server-side: `outfit_drafts` table (`user_id` unique, `slots` jsonb mapping slot→itemId (+ dress mode flag), `updated_at`). Debounced autosave (~1s after last change). Builder mount restores the draft verbatim.
-- Per-slot scroll position IS the selection (centered item), so persisting slot→itemId fully captures "where they scrolled."
-- v1 = one draft (the workspace). Multiple named drafts are a possible later feature, not now.
+- Single active draft per user, server-side: `outfit_drafts` (`user_id` unique, `slots` jsonb slot→itemId + dress state, `updated_at`). Debounced autosave (~1s). Builder mount restores verbatim.
+- **Tolerances:** restore skips deleted/missing itemIds gracefully (empty that slot, subtle note). Concurrent devices: last-write-wins, documented, no merge.
 
 ## 4. New asset: transparent cutouts
 
-Current enhanced photos are **JPEGs on white — no alpha channel**. Paper-doll stacking needs transparent cutouts.
+Current enhanced photos are **JPEGs on white — no alpha**. Paper-doll stacking needs transparent cutouts (WebP-with-alpha preferred; PNG acceptable). New column `item_photos.cutout_storage_path`.
 
-- New derived asset per item photo: transparent-background cutout (WebP-with-alpha preferred for size; PNG acceptable). New column `item_photos.cutout_storage_path` + storage alongside enhanced.
-- Generation approach — **bake-off in the build session** on ~5 tricky items (white garments, sheer fabrics, fine straps): (a) image-model edit with transparent background output vs (b) deterministic local background-removal lib. Decide on quality + cost + determinism; document the choice.
-- Hook: generate at enhancement time for new uploads (pipeline extension) + one-time backfill script for existing wardrobes (pennies per item at current scale).
-- UI fallback: if cutout missing (backfill lag/failure), show the enhanced JPEG — degraded but functional. Never block the builder on cutout availability.
+- **Bake-off (in the spike, on 10–15 real items incl. white garments, sheer fabrics, fine straps):** (a) image-model edit with transparent output vs (b) deterministic local background-removal lib. **Weight cost-at-scale heavily**: model-based ≈ 5¢ × ~30-item closet = ~$1.50/user of pure asset cost pre-revenue; the local lib is ~free and deterministic. Model-based wins only on decisive quality superiority. Cofounder judges the sample (§9).
+- **Trigger strategy: lazy, not global.** Enqueue cutout generation on a user's FIRST builder-open (or at their flag flip), not as a fleet-wide backfill — no spend on users who never see the builder. Founders get proactive backfill during beta. New uploads: cutout step added to the enhancement flow, **fail-open and non-blocking** — a cutout failure must never affect the existing enhancement path.
+- UI fallback while cutouts are pending/missing: enhanced JPEG on white — degraded but functional. Never block the builder.
 
 ## 5. Data + capability changes
 
 | Change | Shape |
 |---|---|
-| `outfits.source` | `'ai' \| 'manual'` (migration; existing rows backfill `'ai'`). Drives analytics + grid badges. |
+| `users.plan` + `users.features` | `plan: 'free' \| 'founder' \| 'premium'` (default free); `features` jsonb default `{}`. **Neither is read directly by gates.** |
+| **Entitlements choke point** | `getEntitlements(user) → { builder: bool, aiStyling: bool, renderQuotaPerWeek: number \| null }` — ONE server-side function derives entitlements from plan + features; every gate (routes, capabilities, UI) reads only this. Future billing swaps the derivation, not the gates. Unit-tested truth table. |
+| `outfits.source` | `'ai' \| 'manual'` (migration; existing rows backfill `'ai'`). |
 | `outfit_drafts` | New table per §3. |
 | `item_photos.cutout_storage_path` | New nullable column. |
-| `users.plan` | `'free' \| 'founder' \| 'premium'` (default `'free'`). Admin-settable (small addition to admin users page). |
-| `try_on_jobs.combo_hash` | Content hash of sorted renderable itemIds + model image — dedupe cache so an identical combination NEVER pays Fashn twice, even across separate saved outfits (renders are seed-deterministic). Lookup before enqueue; on hit, link the existing result. |
-| `outfit.createManual` | New capability: validate slot composition (role rules, ownership), insert outfit + outfit_items with `source='manual'`. |
-| `outfit.saveDraft` / `outfit.getDraft` | Thin draft persistence capabilities (or one upsert + read pair). |
-| `enhancement.cutout` (or pipeline step) | Cutout generation + backfill entry point. |
-| `tryon.generate` additions | Pre-check weekly render quota via `rate_limits` (the long-deferred "extend rate_limits to Fashn" followup — now with a product driver); `users.plan` bypass; combo_hash lookup. |
-| `outfit.generate` gate | Requires plan ∈ {founder, premium}; free plan gets the fake-door UI (below), API returns a typed `premium_required` error. |
+| `outfits.card_storage_path` (or equivalent) | Collage snapshot from save (§3). Verify against how AI-outfit cards work today; reuse that mechanism if one exists. |
+| `try_on_jobs.combo_hash` | Hash of sorted renderable itemIds + model-image identity + **pipeline_version salt** (bump on any render-affecting pipeline/prompt change — the framing fix already proved outputs change under identical inputs). On hit: **COPY the cached image to the new outfit's storage path** — never share pointers (process.ts's outfit-deleted cleanup deletes originals; shared pointers dangle). Per-user by construction (itemIds are per-user); no cross-user reuse. |
+| **Render quota enforcement** | **Trailing-7-day count of `try_on_jobs` rows for the user, checked at enqueue inside `tryon.generate`.** NOT via `rate_limits`: that mechanism counts `generations` rows (written only AFTER completion → parallel-fire bypass), failed jobs write no generations row, and its window logic is hardcoded daily. Count jobs (status pending/running/complete) at enqueue; failures within the window still count (prevents infinite-retry abuse; our own failures are rare per the 0% baseline). |
+| `outfit.createManual` | Validate slot composition (role rules, ownership), insert outfit + outfit_items `source='manual'`. |
+| `outfit.saveDraft` / `outfit.getDraft` | Thin upsert + read. |
+| `enhancement.cutout` | Cutout generation; lazy trigger + founder backfill entry point. |
+| `outfit.generate` gate | Requires `entitlements.aiStyling`; free plan gets fake-door UI; API returns typed `premium_required` error. |
 
-Explicitly reused unchanged: try-on pipeline (all three shapes + framing validation + idempotent resume), async job infra, events, admin dashboards, i18n framework (14 locales — all new strings need the full dictionary pass).
+Explicitly reused unchanged: try-on pipeline (all shapes + framing validation + idempotent resume), async job infra, events, admin dashboards, i18n framework.
+
+**Prerequisite audit (BEFORE v0):** the `role='shoes'`-holding-outerwear data oddity (followups P3) — slots are role-driven; run the mismatch audit query and fix root cause first.
 
 ## 6. Premium packaging (beta shape)
 
-- Free: unlimited building/saving, 7 renders/week.
-- Premium (fake door in beta): unlimited/high renders + AI styling ("Style me" = today's outfit.generate). Gate UI for free users: value framing + "coming soon" waitlist tap (counted). For founders: same surface but marked "Founder access — on us," fully functional.
-- **No Stripe, no receipts, no entitlement service.** `users.plan` + capability gates + counted gate-taps is the whole beta implementation.
-- Positioning note for copy (cofounder): the premium isn't "AI" — it's the house stylist. The stylist_rules/annotated_examples layer IS her taste; say so.
+- Free: unlimited building/saving, 7 renders/week (trailing pool).
+- Premium (fake door in beta): generous renders + AI styling. Free users see value framing + counted "coming soon" tap. Founders: same surface, "Founder access — on us," fully functional.
+- No Stripe, no receipts. Entitlements choke point + counted gate-taps is the whole beta implementation.
+- Positioning (cofounder copy): premium is the **house stylist** — her encoded taste (stylist_rules + annotated_examples) — not generic "AI."
 
-## 7. Events (all via existing @tela/events, `domain.action_past_tense`)
+## 7. Events (`domain.action_past_tense`, existing @tela/events)
 
-- `outfit.builder_opened` (payload: restored_draft: bool)
-- `outfit.builder_session_ended` (per-slot cycle counts, duration, saved: bool — ONE summary event per session, not per swipe; swipe-level events would be noise)
-- `outfit.manual_saved` (slot composition, had_shoes, dress_mode)
-- `tryon.render_requested` (source: 'builder' | 'grid', quota_remaining, cache_hit)
-- `premium.gate_viewed` / `premium.gate_tapped` (surface: 'style_me' | 'render_quota')
+- `outfit.builder_opened` (restored_draft: bool, cutouts_ready: bool)
+- `outfit.builder_session_ended` (per-slot cycle counts, duration, saved: bool) — **reliability rule:** flush on `visibilitychange` with beacon semantics (mobile-web unload events are lossy), and cross-check counts against server-side draft-save deltas; if the client event proves too lossy, derive the session metric server-side and drop the client event.
+- `outfit.manual_saved` (composition, had_shoes, dress_mode)
+- `tryon.render_requested` (source, quota_remaining, cache_hit)
+- `premium.gate_viewed` / `premium.gate_tapped` (surface)
 - `wardrobe.add_prompted_from_builder` (slot)
-
-These feed the beta engagement questions directly: composition depth, save rate, render conversion, premium intent, wardrobe-growth pull.
 
 ## 8. Phasing → session prompts
 
-**v0 — Builder core (no render, no premium):** cutout pipeline + backfill; builder UI (4 slots + dress mode + empty states); server-side draft persistence; save as manual outfit; migrations (`outfits.source`, `outfit_drafts`, `item_photos.cutout_storage_path`, `users.features`); events. *Ships DARK — see §8a.*
+**v-1 — SPIKE (first, one session, throwaway-allowed, zero migrations):** flag-gated bare page (hardcoded gate is fine). Cutout 10–15 REAL items from Luke's + cofounder's wardrobes via BOTH bake-off methods. Hardcoded composition heuristics. Probe: composition-coherence acceptance test (§3), carousel feel on a real phone, both dress patterns, browse-vs-commit candidates. **Output: GO/NO-GO + four locked recipes** — cutout method, composition/normalization recipe, dress pattern, selection semantics. Cofounder judges. Nothing else proceeds until this reports.
 
-**v1 — Render + premium scaffolding:** "See it on the model" wired to try-on; `combo_hash` cache; weekly quota via rate_limits; `users.plan` + admin toggle; AI gate + fake door; quota UI.
+**v0 — Builder core (dark; no render, no premium):** spike recipes applied. Cutout pipeline (lazy trigger + founder backfill) + builder UI (4 slots + dress + empty states) + draft persistence (with restore tolerances) + save-as-manual-outfit + card snapshot + migrations (`outfits.source`, `outfit_drafts`, `item_photos.cutout_storage_path`, `users.features`, card path) + entitlements choke point + events. Prerequisite: role-mismatch audit.
 
-**v1.1 — Fast follows:** accessory slots (bag/jewelry/eyewear/hat, collage-only); role-hygiene audit promotion (the `role='shoes'` mismatch P3 becomes load-bearing once slots are role-driven — audit BEFORE v0 ships, actually: pull into v0 prep); step-cache render optimization (cached bottoms-on-model intermediates → cheaper re-renders when only the top changed); possible remix button on outfit detail (explicitly deferred; nothing ever auto-loads the workspace).
+**v1 — Render + premium scaffolding:** "See it on the model" → try-on; `combo_hash` cache (copy-on-hit, version salt); trailing-7-day quota in `tryon.generate`; `users.plan` + admin toggle (plan AND features editable from admin users page); AI gate + fake door; quota UI.
 
-**Horizon (flagged, not scheduled):** Fashn `model-create`/`model-swap` — "see it on YOU" (user's own photo as the mannequin). Likely the strongest premium anchor the product will have; revisit after beta.
+**v1.1 — Fast follows:** accessory slots (bag/jewelry/eyewear/hat, collage-only); step-cache render optimization (cached bottoms-on-model intermediates); possible remix button on outfit detail (explicitly deferred; nothing ever auto-loads the workspace).
 
-Each phase becomes a session prompt in `docs/session-prompts/` following the house pattern (verified context, kill switches, STOP gates, operating constraints).
+**Horizon (flagged, not scheduled):** Fashn `model-create`/`model-swap` — "see it on YOU." Likely the strongest premium anchor the product will have; revisit after beta.
 
-### 8a. Rollout — zero disruption to the current app (Luke's requirement, 2026-07-07)
+Each phase = a session prompt in `docs/session-prompts/` (house pattern: verified context, kill switches, STOP gates, operating constraints).
 
-The current user experience must be unaffected until a deliberate, reversible flip:
+### 8a. Rollout — zero disruption to the current app (decision #7)
 
-1. **New surface, not a replacement.** The builder lives at a new route with NO links from the existing UI. The current outfits page stays untouched throughout v0/v1. The IA change (builder becomes the outfits-page hero, "Style me" demotes to the premium button) is ONE small final commit, applied only when Luke flips.
-2. **Per-user feature flag**: `users.features` jsonb (default `{}`), admin-toggleable from the admin users page. The builder route gates SERVER-SIDE on `features.builder` — flag off means the route doesn't render even via typed URL. Rollout order: Luke → cofounder → testers. Rollback = flip the flag back; no deploy.
-3. **Additive-only data changes.** New tables + nullable columns only; nothing existing is altered or repurposed. Manual outfits appear only in their creator's own grid.
-4. **Shared-surface rules for build sessions:** (a) NO modifications to existing routes/components during v0/v1 except the final flip commit; (b) the enhancement-pipeline cutout extension must be fail-open and non-blocking — a cutout failure can never affect the existing photo-enhancement flow; (c) `outfit.generate` behavior is unchanged for all users during beta (everyone is founder-plan).
-5. **Trunk-based dark shipping.** Increments merge to main (flag off) through the normal review-then-push cadence — no long-lived feature branch, no big-bang merge. "Launch" is a flag flip.
+1. **New surface, not a replacement.** Builder lives at a new route with NO links from the existing UI. The current outfits page stays untouched throughout. The IA change (builder becomes hero, "Style me" demotes to premium button) is ONE small final commit, applied only when Luke flips.
+2. **Per-user gating via entitlements** (`features.builder` input): route gates SERVER-SIDE — flag off means the route doesn't render even via typed URL. Rollout order: Luke → cofounder → testers. Rollback = flip back; no deploy.
+3. **Additive-only data changes.** New tables + nullable columns; nothing existing altered or repurposed. Manual outfits appear only in their creator's grid.
+4. **Shared-surface WHITELIST for build sessions** (the only pre-flip edits allowed to existing files): (a) the 14 locale dictionary files (new keys only); (b) the admin users page (plan/features toggles); (c) the enhancement flow's additive, fail-open cutout hook. Everything else: new files only. Any session needing an exception STOPS and asks Luke.
+5. **Trunk-based dark shipping.** Increments merge to main (dark) through the normal review-then-push cadence — no long-lived feature branch. "Launch" is a flag flip.
 
-## 9. Open questions (cofounder + Luke)
+## 9. Open questions
 
-1. Dress-mode UI treatment (toggle? auto-collapse when a dress is centered?) — needs her design instinct.
-2. Cutout bake-off acceptance bar — she should judge the 5-item sample.
-3. Naming/copy for the builder surface + premium tier.
-4. Whether free users at beta's end keep their founder-era AI outfits visible (grandfathered artifacts) — recommendation: yes, they're remix-bait and goodwill.
-5. Canvas aesthetic: literal mannequin silhouette vs abstract stacked composition — sample both in v0.
+**Spike answers (cofounder judging):** dress pattern (two prototypes); cutout quality bar + method; canvas aesthetic (literal silhouette vs abstract stack — sample both); selection/browse semantics.
+**Luke + cofounder, before v1:** naming/copy for builder + premium tier; whether free users post-beta keep founder-era AI outfits visible (recommendation: yes — goodwill + they showcase premium).
+**v0 design review:** post-save draft semantics (§3 recommendation: keep + disable Save until changed).
 
 ## 10. Explicitly out of scope
 
-Payments/Stripe; multiple named drafts; accessory try-on (Fashn can't); shoes in renders; social sharing surfaces (the rendered image is organically shareable — dedicated share UX later); "see it on YOU."
+Payments/Stripe; multiple named drafts; accessory try-on (Fashn can't); shoes in renders; dedicated social-share UX (the card snapshot is organically shareable; more later); "see it on YOU."

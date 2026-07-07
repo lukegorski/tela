@@ -82,6 +82,28 @@ app.onError(errorHandler);
 app.get('/health', (c) => {
   const base = { status: 'ok', timestamp: new Date().toISOString() };
   if (c.req.header('x-tela-trace-probe') !== '1') return c.json(base);
+  // Opt-in in-process sampler experiment: run N detached root traces and
+  // report how many recorded plus raw sampleRand values — measures the
+  // live effective root sample rate without relying on traffic statistics
+  // or Sentry-side visibility. Recorded spans are real envelopes named
+  // 'sample-experiment' (deliberate: they double as ingest canaries that
+  // the health-check inbound filter won't eat).
+  const expN = Math.min(Number(c.req.header('x-tela-sample-experiment') ?? 0) || 0, 300);
+  let experiment: { n: number; recorded: number; sampleRands: number[] } | null = null;
+  if (expN > 0) {
+    let recorded = 0;
+    const sampleRands: number[] = [];
+    for (let i = 0; i < expN; i++) {
+      Sentry.startNewTrace(() => {
+        const pc = Sentry.getCurrentScope().getPropagationContext();
+        if (sampleRands.length < 12) sampleRands.push(pc.sampleRand);
+        Sentry.startSpan({ name: 'sample-experiment', forceTransaction: true }, (sp) => {
+          if (sp.isRecording()) recorded++;
+        });
+      });
+    }
+    experiment = { n: expN, recorded, sampleRands };
+  }
   const span = Sentry.getActiveSpan();
   const s = span ? Sentry.spanToJSON(span) : null;
   const dsn = Sentry.getClient()?.getDsn();
@@ -120,6 +142,7 @@ app.get('/health', (c) => {
     envKeys: Object.keys(process.env)
       .filter((k) => /^(SENTRY_|OTEL_|NODE_OPTIONS)/.test(k))
       .sort(),
+    experiment,
   });
 });
 

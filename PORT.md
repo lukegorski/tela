@@ -349,8 +349,8 @@ See "Push approval pattern" above.
 | Outfits page + `OutfitCard` + `OutfitHero` + `OutfitPiecesSheet` + `OutfitGridCell` + `useOutfits` | ✅ Ported (D.7a + D.7b) | `apps/web/src/app/(main)/[lang]/outfits/page.tsx`, `apps/web/src/components/Outfit*.tsx`, `apps/web/src/hooks/useOutfits.ts` |
 | Outfit detail page (standalone `/outfits/[id]`) | ✅ Ported (D.7b) | `apps/web/src/app/(main)/[lang]/outfits/[id]/page.tsx` |
 | Lookbook page (saved outfits) | ✅ Ported (D.8) | `apps/web/src/app/(main)/[lang]/lookbook/page.tsx` |
-| **Chat page + `ChatComposer` + `ChatMessage` + `ChatItemGrid` + `ChatOutfitGrid` + `ChatWardrobePicker` + `useChat`** | ❌ MVP — needs port (D.9). Switch from legacy NDJSON to our SSE endpoint. | Legacy: `src/app/(main)/[lang]/chat/page.tsx`, `src/components/Chat*.tsx`, `src/hooks/useChat.ts` |
-| **Dashboard page** | ❌ Doesn't exist yet (D.10) | Legacy: `src/app/(main)/[lang]/dashboard/page.tsx` |
+| Chat page + `ChatComposer` + `ChatMessage` + `ChatItemGrid` + `ChatOutfitGrid` + `ChatWardrobePicker` + `useChat` | ✅ Ported (D.9 — commits `f84dfe8` D.9b, `62bd0a8` D.9c, `c95bad5` D.9d; SSE endpoint, not legacy NDJSON). Table row was stale until 2026-07-07. | `apps/web/src/app/(main)/[lang]/chat/page.tsx`, `apps/web/src/components/Chat*.tsx` |
+| Dashboard page | ✂️ DROPPED 2026-07-07 — orphaned route in legacy: zero inbound links anywhere in the legacy codebase (not in nav, not on landing; reachable only by typed URL). Early build artifact predating the OUTFITS/WARDROBE/LOOKBOOK tab nav. Deliberately not ported; revisit only if a real home-screen need emerges post-beta. | Legacy: `src/app/(main)/[lang]/dashboard/page.tsx` |
 
 To verify the table is current, run `git log --oneline | head -30`
 and cross-reference against the most recent visual-port commit

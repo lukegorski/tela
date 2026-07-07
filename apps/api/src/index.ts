@@ -1,7 +1,3 @@
-// OTel must be initialized first — before any other imports that need tracing
-import { initOtel } from './otel.js';
-initOtel();
-
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
@@ -20,8 +16,17 @@ import { closeDb } from '@tela/db';
 import { setObservabilityHooks } from '@tela/capabilities';
 import { startInProcessWorker } from './worker.js';
 
-// Initialize Sentry (no-ops if DSN not set)
-initSentry();
+// Sentry is normally initialized in instrument.ts via `node --import` before
+// this module's imports load (required for http tracing under ESM). If the
+// process was started without the flag (`tsx watch` in dev, or a regressed
+// start command), fall back to late init: error capture still works, but
+// loader hooks can no longer attach, so transactions/traces are silently off.
+if (!Sentry.isInitialized()) {
+  logger.warn(
+    'Sentry not initialized via --import ./dist/instrument.js — late init, http tracing disabled',
+  );
+  initSentry();
+}
 
 // Import capabilities to trigger registration
 import '@tela/capabilities';

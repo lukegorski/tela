@@ -36,7 +36,10 @@ export function initSentry() {
     // apps/admin/src/sentry.server.config.ts (admin). Without this, a
     // chat-stream POST that errors mid-flight shows as two disconnected
     // events in Sentry (one web/admin, one api) instead of a single
-    // distributed trace.
+    // distributed trace. Incoming `sentry-trace` headers from web/admin
+    // are continued automatically by the http integration — which only
+    // instruments anything because init runs via instrument.ts/--import
+    // before node:http loads (see instrument.ts).
     tracePropagationTargets: [
       'localhost',
       /^https:\/\/tela-development\.up\.railway\.app/,

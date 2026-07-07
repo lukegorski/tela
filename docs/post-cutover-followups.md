@@ -187,6 +187,10 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
 
 ## Infrastructure
 
+- **`admin.telastyle.app` still points at the legacy Vercel admin — Phase 14 DNS cut never executed** — P1.
+  Verified 2026-07-07: `curl -sI https://admin.telastyle.app` returns `server: Vercel` (legacy admin, reading Firebase data frozen at the 2026-05-22 cutover), while the new admin is healthy at `https://tela-admin-development.up.railway.app` (`server: railway-hikari`). The Phase 14 plan (P4 = Option B) scheduled the cut for end of 14c; 14c's AdminAiChat shipped in May but the cut step was never run — so the cofounder-facing admin at the real domain is a dead app. Full execution plan: [`session-prompts/admin-dns-cut.md`](./session-prompts/admin-dns-cut.md) (parity audit → pre-cut package for Luke → cut → domain verification → legacy retirement). All DNS/Cloudflare/Railway/Supabase changes are Luke-approved-or-Luke-applied per the infra rule.
+  *Origin*: Luke's 2026-07-07 report that the admin dashboard needs to be "up and running correctly" — traced to the unexecuted 14c DNS cut.
+
 - **Promote to `tela/prd` Doppler config + separate Supabase project** — P2.
   Pre-launch we accepted shared dev/prod infrastructure (Doppler `tela/dev` for everything, single Supabase project for all data). Real prod hygiene: separate Doppler config, separate Supabase project, blast-radius isolation. Re-evaluate at 100-user or revenue milestone — not urgent at current scale.
   *Origin*: Phase 11 deployment session summary + cutover runbook.

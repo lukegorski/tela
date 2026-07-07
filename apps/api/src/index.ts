@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { trpcServer } from '@hono/trpc-server';
 import * as Sentry from '@sentry/node';
-import { initSentry, sentryStats } from './sentry.js';
+import { bootSamplingSelfCheck, initSentry, sentryStats } from './sentry.js';
 import { logger } from './logger.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -178,6 +178,7 @@ const server = serve(
   },
   (info) => {
     logger.info({ port: info.port }, 'tela API server started');
+    bootSamplingSelfCheck(info.port);
   },
 );
 

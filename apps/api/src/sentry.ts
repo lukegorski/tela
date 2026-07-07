@@ -74,3 +74,41 @@ export function initSentry() {
 
   logger.info({ tracesSampleRate }, 'Sentry initialized');
 }
+
+/**
+ * Boot-time sampling self-check. On @sentry/node v9 we observed boots where
+ * http-root sampling was silently dead (0 sampled across hundreds of
+ * requests) while detached startNewTrace roots sampled fine — a per-boot
+ * coin flip, undetectable from logs. This fires 100 self-requests at
+ * /health (each wrapped in startNewTrace so every probe rolls a fresh
+ * sample_rand) and alerts via captureMessage — the error path provably
+ * works even on broken boots — if none records.
+ *
+ * At rate 0.1, P(0 of 100 | healthy) ≈ 0.003%. Skipped when tracing is off
+ * or the rate is too low to make 0/100 conclusive.
+ */
+export function bootSamplingSelfCheck(port: number): void {
+  const rate = sentryStats.resolvedTracesSampleRate;
+  if (!Sentry.isInitialized() || !rate || rate < 0.05) return;
+
+  void (async () => {
+    await new Promise((r) => setTimeout(r, 3000));
+    const before = sentryStats.transactionEnvelopes;
+    for (let i = 0; i < 100; i++) {
+      await Sentry.startNewTrace(() =>
+        fetch(`http://127.0.0.1:${port}/health`).then((res) => res.arrayBuffer()),
+      ).catch(() => {});
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+    const sampled = sentryStats.transactionEnvelopes - before;
+    if (sampled === 0) {
+      logger.error(
+        { rate },
+        'BOOT SAMPLING SELF-CHECK FAILED: 0/100 http roots sampled — tracing is dead this boot',
+      );
+      Sentry.captureMessage('api boot: http root sampling dead (0/100 self-probes)', 'error');
+    } else {
+      logger.info({ sampled, rate }, 'boot sampling self-check ok');
+    }
+  })();
+}

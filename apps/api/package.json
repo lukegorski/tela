@@ -21,7 +21,7 @@
   "dependencies": {
     "@hono/node-server": "^1.14.0",
     "@hono/trpc-server": "^0.3.0",
-    "@sentry/node": "^9.27.0",
+    "@sentry/node": "^10.53.1",
     "@supabase/supabase-js": "^2.104.0",
     "@tela/capabilities": "workspace:*",
     "@tela/config": "workspace:*",

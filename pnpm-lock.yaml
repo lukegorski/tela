@@ -112,8 +112,8 @@ importers:
         specifier: ^0.3.0
         version: 0.3.4(@trpc/server@11.16.0(typescript@5.9.3))(hono@4.12.12)
       '@sentry/node':
-        specifier: ^9.27.0
-        version: 9.47.1
+        specifier: ^10.53.1
+        version: 10.53.1
       '@supabase/supabase-js':
         specifier: ^2.104.0
         version: 2.104.0
@@ -360,8 +360,8 @@ importers:
   packages/capabilities:
     dependencies:
       '@sentry/node':
-        specifier: ^9.27.0
-        version: 9.47.1
+        specifier: ^10.53.1
+        version: 10.53.1
       '@supabase/supabase-js':
         specifier: ^2.104.0
         version: 2.104.0

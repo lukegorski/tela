@@ -95,7 +95,7 @@ function ImageCarousel({ className, onReady }: { className?: string; onReady?: (
                 fill
                 sizes="(min-width: 768px) 60vw, 100vw"
                 className="object-cover"
-                priority={i === activeIndex}
+                preload={i === activeIndex}
                 loading="eager"
                 onLoad={() => { if (i === activeIndex) onReady?.(); }}
               />

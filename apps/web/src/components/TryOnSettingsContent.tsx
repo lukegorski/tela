@@ -183,7 +183,7 @@ export default function TryOnSettingsContent() {
                         alt={opt.label}
                         fill
                         sizes="33vw"
-                        priority
+                        preload
                         className="object-cover"
                       />
                     )

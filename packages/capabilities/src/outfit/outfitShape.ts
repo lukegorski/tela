@@ -18,7 +18,10 @@ import {
 } from '../storage/supabase.js';
 import { getOrSignUrl } from '../storage/signedUrlCache.js';
 
-const SIGNED_URL_TTL_SECONDS = 600;
+// 1h, not 10min — same reasoning as itemShape.ts: URLs outlive the
+// response in client caches, and expired tokens surface as image-
+// optimizer 400s. Keep the two files in sync.
+const SIGNED_URL_TTL_SECONDS = 3600;
 
 /**
  * The shape of a single piece inside a rich outfit. Mirrors enough of

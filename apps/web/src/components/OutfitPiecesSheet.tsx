@@ -61,7 +61,9 @@ export default function OutfitPiecesSheet({
                 src={item.imageUrl}
                 alt={item.category}
                 fill
-                sizes="50vw"
+                // Half of the BottomSheet: 50vw mobile, 210px in the
+                // desktop 420px side panel.
+                sizes="(max-width: 640px) 50vw, 210px"
                 className="object-contain"
               />
             )}

@@ -12,9 +12,12 @@ interface OutfitGridCellProps {
   onRequestTryOn?: () => void;
   onDelete?: () => void;
   hideOccasion?: boolean;
+  /** Set on the first (above-the-fold) cell so its try-on image — the
+   *  page's likely LCP — gets a preload link instead of lazy loading. */
+  preload?: boolean;
 }
 
-function OutfitGridCell({ outfit, onTap, onRequestTryOn, onDelete, hideOccasion }: OutfitGridCellProps) {
+function OutfitGridCell({ outfit, onTap, onRequestTryOn, onDelete, hideOccasion, preload }: OutfitGridCellProps) {
   const { dict } = useDictionary();
   const tryOnStatus = outfit.tryOn?.status ?? null;
   const isLoading = tryOnStatus === "pending" || tryOnStatus === "running";
@@ -58,8 +61,11 @@ function OutfitGridCell({ outfit, onTap, onRequestTryOn, onDelete, hideOccasion 
           src={tryOnImageURL!}
           alt={`${outfit.occasion} outfit`}
           fill
-          sizes="(max-width: 768px) 50vw, 33vw"
+          // Mobile grid (below Tailwind sm, 640px) is 2 or 3 columns →
+          // up to 50vw per cell; desktop grid is 5 columns → 20vw.
+          sizes="(max-width: 640px) 50vw, 20vw"
           className="object-cover"
+          preload={preload}
           onError={() => setTryOnBroken(true)}
         />
       ) : (
@@ -73,7 +79,8 @@ function OutfitGridCell({ outfit, onTap, onRequestTryOn, onDelete, hideOccasion 
                     src={item.imageUrl}
                     alt={`Item ${i + 1}`}
                     fill
-                    sizes="(max-width: 768px) 25vw, 16vw"
+                    // Quarter of a grid cell: ≤25vw mobile, 10vw desktop.
+                    sizes="(max-width: 640px) 25vw, 10vw"
                     className="object-contain"
                   />
                 )}

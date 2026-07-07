@@ -17,9 +17,26 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
 
 ## Auth & Onboarding
 
-- **Wildcard `?**` entries in Supabase Redirect URLs** — P2.
-  Right now `useAuth.ts` and `generate-magic-link.ts` pass bare `redirectTo` so that deep-link return (`?next=...`) doesn't break the allowlist match. Adding `?**` wildcards in Supabase Auth → URL Configuration lets us restore deep-link UX (sign-in returns user to the page they were on, not the home page).
-  *Origin*: phase-11 cutover runbook.
+- **Wildcard `?**` entries in Supabase Redirect URLs** — P2 → `[allowlist draft delivered 2026-07-07; code ready on claude/deep-link-return — push ONLY after Luke applies the allowlist]`.
+  ~~Right now `useAuth.ts` and `generate-magic-link.ts` pass bare `redirectTo` so that deep-link return (`?next=...`) doesn't break the allowlist match.~~ Correction from the 2026-07-07 session: only the two `useAuth.ts` files send bare redirects — `generate-magic-link.ts` has emitted `?next=` all along, and both `/auth/callback` routes + `/auth/magic-callback` already consume `?next`. The missing pieces were the capture (ProtectedRoute dropped the origin path) and the send (signInWithGoogle).
+
+  **Code (ready, unpushed)**: branch `claude/deep-link-return` (commit `93f762e`) — ProtectedRoute bounces signed-out visitors to the landing with `?next=<path>`; landing honors it post-auth (covers email/password) and threads it through `signInWithGoogle` (OAuth); open-redirect guards (same-origin relative paths only) at every producer/consumer including admin's callback and magic-callback. **Pushing it before the allowlist update breaks all Google sign-ins** (query-string redirectTo matches nothing → Supabase falls back to Site URL).
+
+  **Dashboard change for Luke (Auth → URL Configuration → Redirect URLs)** — target state; keep existing bare entries (`?**` requires ≥1 char after the path, so it does NOT match the bare form; both forms are needed during transition):
+  - `https://telastyle.app/auth/callback` *(should already exist)*
+  - `https://telastyle.app/auth/callback?**` *(add)*
+  - `https://telastyle.app/auth/magic-callback?**` *(add — magic-link ops against prod)*
+  - `https://tela-web-development.up.railway.app/auth/callback` *(should already exist)*
+  - `https://tela-web-development.up.railway.app/auth/callback?**` *(add)*
+  - `https://admin.telastyle.app/auth/callback` *(should already exist for the DNS cut)*
+  - `https://admin.telastyle.app/auth/callback?**` *(add — future-proofs admin symmetry)*
+  - `https://tela-admin-development.up.railway.app/auth/callback` *(should already exist)*
+  - `https://tela-admin-development.up.railway.app/auth/callback?**` *(add)*
+  - `http://localhost:3000/**`, `http://localhost:3001/**`, `http://localhost:3002/**` *(dev; the 3000 entry likely already exists — magic-link M8 verification with `?next=` worked against it)*
+
+  Also recommended while in there: set **Site URL** to `https://telastyle.app` (it's the silent fallback when redirect_to matches nothing; today it appears to be `localhost:3000`, which is how the Phase B bug dumped users on a dead page).
+  Verification after code push: signed-out visit to `/en/outfits/<id>` → Google sign-in → land back on that exact URL; same via a generated magic link (`--site https://telastyle.app --next /en/outfits/<id>`).
+  *Origin*: phase-11 cutover runbook; status updated by the 2026-07-07 launch-quick-wins session.
 
 - **OAuth popup R&D** — P2 (consider promoting to P1 once Phase B `getSession` caching lands).
   Current flow is full-page redirect. Popup would feel snappier and avoid the auth context flush. Two paths to investigate: (a) Supabase + COOP-compliant popup wrapper, (b) Google One Tap via `supabase.auth.signInWithIdToken`. Earlier popup attempt was reverted (commit `55bcb8c`) — re-attempt with lessons learned.
@@ -158,8 +175,9 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
   Paid feature, deferred until users return and real bug-triage value justifies cost. Note: `@sentry/nextjs` v10 makes Replay opt-in (not in default integrations), so adding it later is a single-line change in `instrumentation-client.ts`.
   *Origin*: post-Sentry-in-web follow-up.
 
-- **Sentry tunnel route** — P2.
-  Bypass ad blockers (uBlock Origin et al. block Sentry by default). Real concern for public audience; deferred until launch traffic exists. Configure `tunnelRoute` in `next.config.ts` `withSentryConfig` options. ~1 hour.
+- **Sentry tunnel route** — `[DONE 2026-07-07 — commit ad7936d; deployed blocked-transport smoke pending next push]`.
+  ~~Bypass ad blockers (uBlock Origin et al. block Sentry by default). Real concern for public audience; deferred until launch traffic exists. Configure `tunnelRoute` in `next.config.ts` `withSentryConfig` options. ~1 hour.~~
+  `tunnelRoute: '/monitoring'` in both `apps/web/next.config.ts` and `apps/admin/next.config.ts` (symmetric). Web also needed `/monitoring` in proxy.ts's `LOCALE_EXEMPT_PREFIXES` — middleware runs before rewrites, so the locale redirect was eating the envelope POST (admin has no proxy). A fixed string (not the SDK's random-per-build option) precisely because the proxy exemption must be static. Client SDK picks the path up from build-time env injection — no `instrumentation-client.ts` changes; works under Turbopack. Local proof: POST of a real envelope to `localhost:3001/monitoring?o=…&p=…&r=us` returned Sentry ingest's `{"id":…}`, while a control path still locale-redirects. Remaining on-deploy check: block `*.sentry.io` in devtools, trigger a test error, confirm the event lands in `tela-web` via the tunnel. Residual risk (accepted): some filter lists match the literal `/monitoring` path itself — revisit if blocker-user events stay absent post-launch.
   *Origin*: post-Sentry-in-web follow-up.
 
 - **Railway api service reports Sentry environment=`development` + 100% tracing** — ✅ DONE (2026-07-06/07, two sessions).
@@ -176,13 +194,11 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
   **Alerting:** Sentry issue-alert rule "api boot sampling dead" (alert 3675030, project tela-api) emails Luke when an event's message contains `http root sampling dead` (new issue / escalation / regression, no throttle) — a broken-sampling boot now pages instead of failing silently.
   *Origin*: spawned fix task from the NODE_ENV rollout session — 2026-07-06 canary evidence: sustained `/health` at 100% sampling produced zero releases/transactions in tela-api.
 
-- **Next `<Image>` warnings + Supabase signed-URL 400s in browser console** — P2.
-  Two related but distinct issues fire on any signed-in page that renders wardrobe / outfit / try-on images. They pollute the browser console (obscuring real errors during triage) and degrade image performance:
-
-  1. **Signed-URL 400s.** Requests to `/_next/image?url=https%3A%2F%2Fcyupcwfvtbfkupbdcoql.supabase.co/storage/v1/object/sign/...` return 400 from Next's image optimizer. Likely cause: either the Supabase storage domain isn't whitelisted in `apps/web/next.config.ts`'s `images.remotePatterns`, or the optimizer mishandles the signed-URL query string. Functionally silent — `<Image>` falls back to the source URL so images do render — but we lose Next's resize/format/cache optimization on every wardrobe item. Performance cost scales with image count and viewport size.
-  2. **`<Image>` prop misuse warnings.** Multiple instances of `fill` + `sizes="100vw"` mismatch (image not rendered at full viewport width), `fill` inside parents with invalid `position: static`, and an LCP-image without `loading="eager"`. Not user-visible but trips Next's dev overlay and adds noise to console during real-error triage.
-
-  Fix path: (a) add Supabase storage host to `next.config.ts` `images.remotePatterns` and verify the optimizer can fetch signed URLs (may need a custom loader or to fall back to unoptimized for signed URLs); (b) audit `<Image fill>` call sites — set parent `position: relative`, set `sizes` to match the rendered breakpoint, and add `loading="eager"` (or `priority`) on the landing/wardrobe LCP image.
+- **Next `<Image>` warnings + Supabase signed-URL 400s in browser console** — `[DONE 2026-07-07 — commit f0fe1e3; deployed browser smoke pending next push]`.
+  ~~Likely cause: either the Supabase storage domain isn't whitelisted in `apps/web/next.config.ts`'s `images.remotePatterns`, or the optimizer mishandles the signed-URL query string.~~ **Both hypotheses were wrong** — `**.supabase.co` was already in `remotePatterns`, and the optimizer handles signed query-string URLs fine (omitting `search` in a remotePattern allows any query string; verified locally: fresh signed URL → 200, optimized 58KB vs 168KB raw). Reproduced root cause: **expired tokens**. The optimizer relays the upstream status when Supabase rejects the fetch (`InvalidJWT: "exp" claim timestamp check failed` → the 400, body `"url" parameter is valid but upstream response is invalid`). 600s-TTL URLs were routinely re-rendered from client caches past expiry (React Query gcTime ~5min + stale-while-revalidate + the api's `signedUrlCache` handing out URLs with as little as 2min validity left). NOT `unoptimized` anywhere — the optimizer stays fully on.
+  Fix (commit `f0fe1e3`): item/outfit signed-URL TTL 600s → **3600s** (`itemShape.ts`, `outfitShape.ts`; tryon + chat attachments were already 3600s) and `signedUrlCache` safety margin 2min → **10min**, so every URL handed to a client outlives the client-cache horizon. Accepted trade-off: a private-photo signed URL is now valid 1h instead of 10min (same class as the pre-existing 1h tryon URLs). Residual edge (accepted): a tab idle >1h can still 400 on its first interaction, then recovers on refetch.
+  `<Image>` audit (against `node_modules/next/dist/docs` — Next 16 facts: `priority` deprecated in favor of `preload`; the "detected as LCP, add priority" dev warning no longer exists; `qualities` defaults to `[75]`): fixed the one real `position: static` parent (OutfitHero's hero `<button>`); corrected dishonest `sizes` (BottomSheet children claimed viewport widths but render in a 420px desktop side panel; outfits/lookbook desktop grids are 5-col → 20vw not 33vw; the mobile/desktop split is Tailwind `sm` 640px, not 768px); swapped `priority` → `preload`; added `preload` to the likely-LCP first grid cell on wardrobe/outfits/lookbook.
+  Remaining on-deploy check: zero `/_next/image` 400s + zero image console warnings on wardrobe/outfits/lookbook, optimized content-type/size on wire.
   *Origin*: surfaced repeatedly during Phase A + Phase B browser smoke tests on `tela-web-development.up.railway.app` (every wardrobe/outfit/chat page load reproduces it).
 
 ## Infrastructure
@@ -200,6 +216,10 @@ Marked `[DONE]` items are kept for historical context until the next housekeepin
   *Origin*: Phase 11 deployment pre-flight inventory.
 
 ## Tech Debt
+
+- **`pnpm verify` assumes warm workspace dists — fails on a cold checkout/worktree** — P3.
+  The verify chain builds only `@tela/db` and `@tela/capabilities` but merely *typechecks* (`--noEmit`) `@tela/events`/`@tela/ai`, and never touches `@tela/types`, `@tela/prompts`, or `@tela/api` — all of which have `exports` pointing at `dist/`. On a fresh `pnpm install` (new worktree, CI, new machine) verify fails with cascading `TS2307 Cannot find module '@tela/…'` (and the tRPC router type degrades into the confusing "property collides with a built-in method" union). Workaround: `pnpm exec turbo build --filter='./packages/*' && pnpm --filter @tela/api build` first (turbo's `typecheck.dependsOn: [^build]` already encodes the right graph). Fix: either prepend those builds to the verify script or switch verify to `turbo`.
+  *Origin*: 2026-07-07 launch-quick-wins session — first time verify ran in a cold worktree.
 
 - **Three dead-code `postgres()` clients in `apps/web/src/lib/`** — `[DONE 2026-05-22]`.
   ~~`profile.ts`, `chat.ts`, `users.ts` each instantiate their own `postgres()` client with no callers found. They're pgbouncer-naive (no `prepare: false` per pitfall #14) so if anyone wires them up later they'll quietly regress under load. Either wire them up properly via `@tela/db`'s `getDb()` (which has the pgbouncer fix) or delete the files.~~

@@ -4,6 +4,7 @@ import { getDb, itemPhotos } from '@tela/db';
 import { image } from '@tela/ai';
 import { getPrompt } from '@tela/prompts';
 import { logEvent } from '@tela/events';
+import { getQueue, JOB_NAMES } from '@tela/queue';
 import { registerCapability } from '../registry.js';
 import { getRequestContext } from '../context/requestContext.js';
 import { getSupabaseAdmin, ITEM_PHOTOS_BUCKET } from '../storage/supabase.js';
@@ -189,6 +190,27 @@ export const processEnhancement = registerCapability({
           type: 'enhancement.retry',
           source,
           payload: { photoId, edgeRatios: cropCheck.edgeRatios },
+        });
+      }
+
+      // Builder v0 (§8a whitelist item c): enqueue the transparent-cutout
+      // step for the freshly-enhanced photo. FAIL-OPEN and additive — a
+      // cutout enqueue failure must NEVER affect the enhancement result.
+      try {
+        const queue = await getQueue();
+        await queue.send(JOB_NAMES.CUTOUT_PHOTO, { photoId, userId });
+      } catch (cutoutErr) {
+        await logEvent({
+          userId,
+          type: 'enhancement.cutout_failed',
+          source,
+          payload: {
+            photoId,
+            stage: 'enqueue',
+            error: (cutoutErr instanceof Error ? cutoutErr.message : String(cutoutErr)).slice(0, 200),
+          },
+        }).catch(() => {
+          /* even event logging must not break enhancement */
         });
       }
 

@@ -71,7 +71,9 @@ type EnhancementEvent =
   | 'enhancement.started'
   | 'enhancement.completed'
   | 'enhancement.retry'
-  | 'enhancement.failed';
+  | 'enhancement.failed'
+  | 'enhancement.cutout_completed' // transparent WebP cutout written (builder v0)
+  | 'enhancement.cutout_failed'; // cutout error — never affects enhancement itself (fail-open)
 
 // Try-on domain
 type TryOnEvent =

@@ -19,6 +19,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@imgly/background-removal-node": "1.4.5",
     "@sentry/node": "^10.53.1",
     "@supabase/supabase-js": "^2.104.0",
     "@tela/ai": "workspace:*",

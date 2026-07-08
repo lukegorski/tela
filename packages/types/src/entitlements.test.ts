@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveEntitlements } from './derive.js';
+import { deriveEntitlements } from './entitlements.js';
 
 describe('deriveEntitlements — truth table (spec §5)', () => {
   it.each([

@@ -304,5 +304,32 @@
     "onboardingLocationPrompt": "Var befinner du dig? Jag anpassar dina outfits efter lokalt väder och säsong.",
     "onboardingLocationPlaceholder": "Sök efter din stad...",
     "onboardingSkip": "Du håller på att ställa in din Tela. Hoppa över för nu."
+  },
+  "builder": {
+    "title": "Byggaren",
+    "preparing": "Förbereder dina plagg…",
+    "slots": {
+      "outerwear": "Ytterplagg",
+      "top": "Överdel",
+      "bottom": "Underdel",
+      "shoes": "Skor"
+    },
+    "dressHint": "klänningar i slutet",
+    "none": "ingen",
+    "browsing": "Bläddrar",
+    "keep": "Behåll",
+    "revert": "Ångra",
+    "kept": "Behållen",
+    "reverted": "Ångrat — din outfit är orörd",
+    "dressOff": "Klänning av — tillbaka till delarna",
+    "coveredByDress": "Täckt av klänningen — svep här för delar",
+    "swipeHint": "Svep en zon för att bläddra · tryck för att behålla",
+    "emptyWardrobe": "Byggaren behöver över- och underdelar. Lägg till några plagg för att börja.",
+    "addItems": "Lägg till plagg",
+    "itemsMissing": "Vissa sparade plagg är inte längre tillgängliga",
+    "loadError": "Kunde inte ladda din garderob. Dra för att försöka igen.",
+    "save": "Spara outfit",
+    "saveInvalid": "Välj överdel + underdel (eller en klänning)",
+    "saveSoon": "Sparande kommer i nästa steg"
   }
 }

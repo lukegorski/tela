@@ -304,5 +304,32 @@
     "onboardingLocationPrompt": "Où es-tu ? J'adapterai tes tenues à la météo et à la saison locale.",
     "onboardingLocationPlaceholder": "Recherche ta ville...",
     "onboardingSkip": "Tu es en train de configurer ton Tela. Passer pour l'instant."
+  },
+  "builder": {
+    "title": "Créateur",
+    "preparing": "Préparation de vos pièces…",
+    "slots": {
+      "outerwear": "Veste",
+      "top": "Haut",
+      "bottom": "Bas",
+      "shoes": "Chaussures"
+    },
+    "dressHint": "robes à la fin",
+    "none": "aucun",
+    "browsing": "Exploration",
+    "keep": "Garder",
+    "revert": "Annuler",
+    "kept": "Gardé",
+    "reverted": "Annulé — votre tenue est intacte",
+    "dressOff": "Robe retirée — retour aux pièces",
+    "coveredByDress": "Couvert par la robe — balayez ici pour les pièces",
+    "swipeHint": "Balayez une zone pour explorer · touchez pour garder",
+    "emptyWardrobe": "Le créateur a besoin de hauts et de bas. Ajoutez quelques pièces pour commencer.",
+    "addItems": "Ajouter des pièces",
+    "itemsMissing": "Certaines pièces enregistrées ne sont plus disponibles",
+    "loadError": "Impossible de charger votre garde-robe. Balayez pour réessayer.",
+    "save": "Enregistrer la tenue",
+    "saveInvalid": "Choisissez un haut + un bas (ou une robe)",
+    "saveSoon": "L'enregistrement arrive à la prochaine étape"
   }
 }

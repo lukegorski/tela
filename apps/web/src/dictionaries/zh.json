@@ -304,5 +304,32 @@
     "onboardingLocationPrompt": "你在哪里？我会根据你当地的天气和季节来搭配服装。",
     "onboardingLocationPlaceholder": "搜索你的城市...",
     "onboardingSkip": "你正在设置你的Tela。先跳过。"
+  },
+  "builder": {
+    "title": "搭配器",
+    "preparing": "正在准备你的单品…",
+    "slots": {
+      "outerwear": "外套",
+      "top": "上装",
+      "bottom": "下装",
+      "shoes": "鞋子"
+    },
+    "dressHint": "连衣裙在最后",
+    "none": "无",
+    "browsing": "浏览中",
+    "keep": "保留",
+    "revert": "还原",
+    "kept": "已保留",
+    "reverted": "已还原 — 穿搭未改动",
+    "dressOff": "已脱下连衣裙 — 回到分开单品",
+    "coveredByDress": "被连衣裙覆盖 — 在此滑动切换回分开单品",
+    "swipeHint": "滑动区域浏览 · 点按保留",
+    "emptyWardrobe": "搭配器需要上装和下装。添加几件单品开始搭配吧。",
+    "addItems": "添加单品",
+    "itemsMissing": "部分已保存的单品已不可用",
+    "loadError": "无法加载你的衣橱。下拉重试。",
+    "save": "保存穿搭",
+    "saveInvalid": "请选择上装 + 下装（或连衣裙）",
+    "saveSoon": "保存功能将在下一步推出"
   }
 }

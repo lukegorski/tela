@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { getDb, users } from '@tela/db';
 import { registerCapability } from '../registry.js';
 import { getRequestContext } from '../context/requestContext.js';
-import { deriveEntitlements } from '../entitlements/derive.js';
+import { deriveEntitlements } from '@tela/types';
 
 const input = z.object({});
 

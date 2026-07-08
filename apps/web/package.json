@@ -18,6 +18,7 @@
     "@supabase/supabase-js": "^2.104.0",
     "@tanstack/react-query": "^5.62.0",
     "@tela/api": "workspace:*",
+    "@tela/types": "workspace:^",
     "@trpc/client": "^11.3.0",
     "@trpc/react-query": "^11.3.0",
     "@trpc/server": "^11.3.0",

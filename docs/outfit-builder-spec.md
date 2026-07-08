@@ -1,7 +1,7 @@
-# Outfit Builder — product + engineering spec (v2)
+# Outfit Builder — product + engineering spec (v3)
 
-**Status: DRAFT for Luke + cofounder review — 2026-07-07 (v2 after adversarial self-critique, same day)**
-**Owner thread:** outfits-page redesign (manual-first styling). Decisions in §2 were made explicitly by Luke; do not relitigate them in build sessions. Items marked **SPIKE-DECIDES** are deliberately unresolved until the v-1 spike answers them with real assets on a real phone.
+**Status: v-1 SPIKE COMPLETE — VERDICT: GO (Luke + cofounder, 2026-07-07). All SPIKE-DECIDES items resolved (§2a); evidence in `docs/outfit-builder-spike-report.md`.**
+**Owner thread:** outfits-page redesign (manual-first styling). Decisions in §2 and §2a were made explicitly by Luke (cofounder confirming §2a); do not relitigate them in build sessions.
 
 ---
 
@@ -9,7 +9,7 @@
 
 Invert the outfits page from AI-first to **manual-first**. Users build outfits themselves by flipping through their own wardrobe items on a mannequin-style canvas. AI styling remains available but becomes the **premium** path, not the default. The feature should feel like play (paper-doll composition), never lose the user's work, and treat the photoreal try-on render as a deliberate, valuable moment rather than an ambient effect.
 
-**The central risk is NOT engineering — it's whether flipping cutouts of real wardrobe photos feels delightful and composes coherently.** The plan therefore leads with a throwaway spike (§8, v-1) before any durable infrastructure.
+**The central risk is NOT engineering — it's whether flipping cutouts of real wardrobe photos feels delightful and composes coherently.** The plan therefore led with a throwaway spike (§8, v-1 — complete, GO) before any durable infrastructure. The spike's one material finding: composition coherence requires pose-consistent inputs, addressed by the presentation gate + canonical-pose enhancement (§2a #12), not by cleverer geometry.
 
 ## 2. Locked decisions (Luke, 2026-07-07)
 
@@ -23,18 +23,39 @@ Invert the outfits page from AI-first to **manual-first**. Users build outfits t
 | 6 | **Builder state persists server-side across sessions.** Whatever the user last had assembled is exactly what appears on reopen — any device. No auto-loaded suggestions, no random outfits in the workspace. Remix is OUT of v1. |
 | 7 | **Zero disruption to the current app until a deliberate, reversible flip** (§8a). Everything ships dark behind a per-user flag; the outfits-page IA change is one small final commit. |
 
+### 2a. Spike-locked recipes (v-1 verdicts — Luke + cofounder, 2026-07-07)
+
+| # | Decision |
+|---|---|
+| 8 | **Cutout method: local background removal** (`@imgly/background-removal-node`, default isnet) **+ deterministic alpha-curve post-pass** (alpha 0 below 70, 255 above 190, linear ramp between), output WebP-with-alpha. Measured: $0, ~0.8s/item, pixel-faithful on 15/15 incl. white-on-white, lace, thin straps. Image-model cutouts (gpt-image-1.5, transparent output) REJECTED: regenerates garments (pattern relocation, texture loss, silhouette drift) at ~6.3¢ + ~30s per item. |
+| 9 | **Canvas: invisible mannequin.** Body-anchored composition (recipe in §3) over a faint human silhouette; final silhouette opacity (faint vs fully invisible) is a v0 design-review knob. Styled-collage and slot-card treatments were rendered and set aside (spike kit `04-alternatives/`); collage remains a candidate for the *save-card* art direction only. |
+| 10 | **Dress pattern: fluid.** Dresses live at the end of the top carousel; flipping onto one collapses top+bottom into the dress zone; swiping the bottom zone exits back to separates (restores last top). v0 adds a small "dresses →" discoverability hint on the top zone. Mirrors the existing dress-wins pipeline semantics. |
+| 11 | **Selection semantics: tap-to-lock.** Browsing renders the candidate in a visually distinct preview state (dimmed + Keep/Revert affordance) and NEVER mutates the committed outfit; tapping the zone (or Keep) commits; starting to browse another slot reverts the prior browse. Structural moves (e.g., bottom-swipe dress exit) commit immediately. Centered-is-selected + undo REJECTED — it destroys work-in-progress by design. |
+| 12 | **Presentation gate (Luke, post-spike).** Folded garment photos: soft warning + retake guidance at upload ("lay it flat"), hard exclusion from builder carousels. `presentation: flat \| folded \| angled` classified inside the existing `item.analyze` vision pass (zero extra API calls); existing folded items get a "retake to use in outfits" badge. Enhancement prompt v2 canonicalizes pose per category (upright, front-facing; tops sleeves relaxed; pants legs straight); founder closets get a one-time re-enhance backfill (~50 items ≈ $2.50). Measured need: ~25% of one founder closet is folded photos; 0% of the other. |
+| 13 | **Slot scope reaffirmed.** Shoes stay in v1 (they visually terminate the composition; 20% of the cofounder's wardrobe). v1.1 accessories use **two-tier anchors**: on-body for worn-shape photo categories (necklace, eyewear, headwear), margin-beside-the-figure for display-pose categories (belt, scarf, bag) — implemented as tap-chips at anchor points, never additional swipe bands (four bands is the gesture budget on a phone). |
+
 ## 3. Interaction model
 
 ### Slots + canvas
-- Mobile-first single-column canvas: stylized silhouette backdrop with stacked slot zones — **outerwear, top, bottom, shoes** — each rendering the selected item's transparent cutout in body order.
-- Each slot is a horizontal carousel of that category's items. Slots can be empty (a "none" position — outerwear and shoes especially; "no jacket" is a first-class state).
-- **Selection semantics — SPIKE-DECIDES.** Naive "centered item = selection" means browsing mutates the outfit (peek at one more top and your loved combo is gone, autosaved away). Candidates to probe: (a) centered-is-selected + one-step undo; (b) tap-to-lock per slot with visually distinct browse state; (c) dwell-based commitment. The spike picks whichever feels right AND protects work-in-progress.
-- **Dress handling — SPIKE-DECIDES.** Two candidate patterns, both prototyped for the cofounder (her audience is womenswear-heavy; dresses must not feel bolted on): (a) explicit one-piece toggle collapsing top+bottom; (b) dresses as a natural carousel occupying the top+bottom zone, where swiping either separates slot fluidly exits dress mode. Whichever wins must mirror the existing dress-wins pipeline semantics.
+- Mobile-first single-column canvas: **invisible-mannequin** backdrop (faint silhouette, decision #9) with stacked slot zones — **outerwear, top, bottom, shoes** — each rendering the selected item's transparent cutout in body order.
+- Each slot is a horizontal carousel of that category's items, swiped directly on its canvas zone. Slots can be empty (a "none" position — outerwear and shoes especially; "no jacket" is a first-class state).
+- **Selection semantics — locked (#11): tap-to-lock.** Browsing shows a visually distinct preview (dimmed + Keep/Revert) and never mutates the committed outfit; tap commits; browsing a different slot reverts the prior browse. The spike prototyped centered-is-selected + undo as the alternative and rejected it: every peek rewrote the outfit with only one step recoverable.
+- **Dress handling — locked (#10): fluid.** Dresses are the tail of the top carousel; landing on one collapses top+bottom into a single dress zone; swiping the bottom zone exits back to separates (restores the last top). A "dresses →" hint on the top zone ships in v0 for discoverability. Mirrors the existing dress-wins pipeline semantics. (The explicit Separates|Dress toggle was prototyped and set aside — modal, less playful.)
 - **Post-save draft semantics — decide in v0 design review:** after "Save," does the workspace keep the composition (risk: accidental near-duplicate saves) or clear (risk: broken "keep going from here")? Recommendation to test: keep, with the Save button disabled until the composition changes again.
 - Empty-wardrobe states: a slot with zero items shows an inline "Add tops →" affordance into the upload flow. The builder is the pull that grows wardrobes.
 
-### Composition coherence (the real hard problem)
-Stacking arbitrary cutouts must **read as an outfit**, not a collage of mismatched scales. Real wardrobe photos vary in aspect ratio, garment scale, and orientation (some garments photographed folded). Required: per-category normalization heuristics (relative width targets — e.g., top shoulder-width ≈ bottom waist-width × k — plus vertical anchor points). **Acceptance test (spike): 3 random tops × 3 random bottoms from a real closet must stack into something that reads as an outfit.** Folded/awkward source photos may need flagging or exclusion rules; the spike quantifies how common they are in real wardrobes.
+### Composition recipe (locked; spike-validated)
+Items place by **trimmed alpha bbox** (opaque pixels at alpha>16) on a 3:4 portrait canvas over the invisible mannequin. Per-role constants — `widthFrac` (bbox width ÷ canvas width), `centerY` (bbox vertical center ÷ canvas height), max-height cap, z-order:
+
+| role | widthFrac | centerY | maxH | z |
+|---|---|---|---|---|
+| outerwear | 0.90 | 0.29 | 0.46 | 30 |
+| top | 0.74 | 0.285 | 0.42 | 20 |
+| bottom | 0.58 | 0.665 | 0.50 | 10 |
+| dress | 0.72 | 0.46 | 0.68 | 20 |
+| shoes | 0.34 | 0.915 | 0.15 | 40 |
+
+Plus one guard: tops with bbox aspect > 1.15 (sleeves spread) get width ×1.12. Port the spike's recipe module verbatim into v0 (single source shared by canvas and card renderer). **Acceptance result:** 6/9 random top×bottom cells read as outfits; all 3 failures were one folded source photo — which is why coherence is now guaranteed upstream by decision #12 (presentation gate + canonical-pose enhancement), not by more geometry. Folded items are excluded from carousels until retaken.
 
 ### Save + render
 - **Save** requires validity: (top AND bottom) OR dress. Shoes optional but nudged. Saved outfits get `source='manual'`, appear in grid + lookbook like AI outfits.
@@ -50,8 +71,8 @@ Stacking arbitrary cutouts must **read as an outfit**, not a collage of mismatch
 
 Current enhanced photos are **JPEGs on white — no alpha**. Paper-doll stacking needs transparent cutouts (WebP-with-alpha preferred; PNG acceptable). New column `item_photos.cutout_storage_path`.
 
-- **Bake-off (in the spike, on 10–15 real items incl. white garments, sheer fabrics, fine straps):** (a) image-model edit with transparent output vs (b) deterministic local background-removal lib. **Weight cost-at-scale heavily**: model-based ≈ 5¢ × ~30-item closet = ~$1.50/user of pure asset cost pre-revenue; the local lib is ~free and deterministic. Model-based wins only on decisive quality superiority. Cofounder judges the sample (§9).
-- **Trigger strategy: lazy, not global.** Enqueue cutout generation on a user's FIRST builder-open (or at their flag flip), not as a fleet-wide backfill — no spend on users who never see the builder. Founders get proactive backfill during beta. New uploads: cutout step added to the enhancement flow, **fail-open and non-blocking** — a cutout failure must never affect the existing enhancement path.
+- **Bake-off — ANSWERED (decision #8, report §2):** the local lib won on the axis that matters most — identity fidelity (the image model regenerates garments) — *and* on cost ($0 vs ~$1.89/30-item closet), latency (0.8s vs 30s per item), and determinism. Cutouts run on the **enhanced** image (post prompt-v2 canonical pose), through `@imgly/background-removal-node` + the alpha-curve post-pass, stored as WebP-with-alpha.
+- **Trigger strategy: lazy, not global.** Enqueue cutout generation on a user's FIRST builder-open (or at their flag flip), not as a fleet-wide backfill — no spend on users who never see the builder. At the measured ~0.8s/item, a 30-item closet cuts out in under half a minute on one worker, so lazy-on-first-open is comfortably interactive. Founders get proactive backfill during beta. New uploads: cutout step added to the enhancement flow, **fail-open and non-blocking** — a cutout failure must never affect the existing enhancement path.
 - UI fallback while cutouts are pending/missing: enhanced JPEG on white — degraded but functional. Never block the builder.
 
 ## 5. Data + capability changes
@@ -63,6 +84,8 @@ Current enhanced photos are **JPEGs on white — no alpha**. Paper-doll stacking
 | `outfits.source` | `'ai' \| 'manual'` (migration; existing rows backfill `'ai'`). |
 | `outfit_drafts` | New table per §3. |
 | `item_photos.cutout_storage_path` | New nullable column. |
+| `closet_items.presentation` | `'flat' \| 'folded' \| 'angled'` (nullable varchar), classified by `item.analyze` (prompt extension, zero extra calls). Folded → excluded from builder carousels + "retake" badge; soft warning at upload. |
+| **Enhancement prompt v2** | Canonical per-category flat-lay pose added to `enhancement.product_photo` (new prompt version; same single call per upload). One-time founder-closet re-enhance backfill (~$2.50). |
 | `outfits.card_storage_path` (or equivalent) | Collage snapshot from save (§3). Verify against how AI-outfit cards work today; reuse that mechanism if one exists. |
 | `try_on_jobs.combo_hash` | Hash of sorted renderable itemIds + model-image identity + **pipeline_version salt** (bump on any render-affecting pipeline/prompt change — the framing fix already proved outputs change under identical inputs). On hit: **COPY the cached image to the new outfit's storage path** — never share pointers (process.ts's outfit-deleted cleanup deletes originals; shared pointers dangle). Per-user by construction (itemIds are per-user); no cross-user reuse. |
 | **Render quota enforcement** | **Trailing-7-day count of `try_on_jobs` rows for the user, checked at enqueue inside `tryon.generate`.** NOT via `rate_limits`: that mechanism counts `generations` rows (written only AFTER completion → parallel-fire bypass), failed jobs write no generations row, and its window logic is hardcoded daily. Count jobs (status pending/running/complete) at enqueue; failures within the window still count (prevents infinite-retry abuse; our own failures are rare per the 0% baseline). |
@@ -93,9 +116,9 @@ Explicitly reused unchanged: try-on pipeline (all shapes + framing validation + 
 
 ## 8. Phasing → session prompts
 
-**v-1 — SPIKE (first, one session, throwaway-allowed, zero migrations):** flag-gated bare page (hardcoded gate is fine). Cutout 10–15 REAL items from Luke's + cofounder's wardrobes via BOTH bake-off methods. Hardcoded composition heuristics. Probe: composition-coherence acceptance test (§3), carousel feel on a real phone, both dress patterns, browse-vs-commit candidates. **Output: GO/NO-GO + four locked recipes** — cutout method, composition/normalization recipe, dress pattern, selection semantics. Cofounder judges. Nothing else proceeds until this reports.
+**v-1 — SPIKE: DONE 2026-07-07, verdict GO.** All four recipes locked (§2a); evidence + judging kit in `docs/outfit-builder-spike-report.md` (kit on Luke's Desktop). Spike code stays on branch `spike/outfit-builder`, never merged.
 
-**v0 — Builder core (dark; no render, no premium):** spike recipes applied. Cutout pipeline (lazy trigger + founder backfill) + builder UI (4 slots + dress + empty states) + draft persistence (with restore tolerances) + save-as-manual-outfit + card snapshot + migrations (`outfits.source`, `outfit_drafts`, `item_photos.cutout_storage_path`, `users.features`, card path) + entitlements choke point + events. Prerequisite: role-mismatch audit.
+**v0 — Builder core (dark; no render, no premium):** spike recipes applied (§2a). Cutout pipeline (lazy trigger + founder backfill) + builder UI (4 slots + fluid dress + tap-to-lock + empty states) + draft persistence (with restore tolerances) + save-as-manual-outfit + card snapshot + migrations (`outfits.source`, `outfit_drafts`, `item_photos.cutout_storage_path`, `closet_items.presentation`, `users.features`, card path) + entitlements choke point + events. Prerequisites: role-mismatch audit; presentation gate + `item.analyze` prompt extension; enhancement prompt v2 + founder re-enhance backfill.
 
 **v1 — Render + premium scaffolding:** "See it on the model" → try-on; `combo_hash` cache (copy-on-hit, version salt); trailing-7-day quota in `tryon.generate`; `users.plan` + admin toggle (plan AND features editable from admin users page); AI gate + fake door; quota UI.
 
@@ -115,9 +138,9 @@ Each phase = a session prompt in `docs/session-prompts/` (house pattern: verifie
 
 ## 9. Open questions
 
-**Spike answers (cofounder judging):** dress pattern (two prototypes); cutout quality bar + method; canvas aesthetic (literal silhouette vs abstract stack — sample both); selection/browse semantics.
+**Answered by the v-1 spike (Luke + cofounder, 2026-07-07):** cutout method → local lib + alpha curve (#8); canvas → invisible mannequin (#9); dress pattern → fluid (#10); selection semantics → tap-to-lock (#11).
 **Luke + cofounder, before v1:** naming/copy for builder + premium tier; whether free users post-beta keep founder-era AI outfits visible (recommendation: yes — goodwill + they showcase premium).
-**v0 design review:** post-save draft semantics (§3 recommendation: keep + disable Save until changed).
+**v0 design review:** post-save draft semantics (§3 recommendation: keep + disable Save until changed); silhouette opacity (faint vs fully invisible); polish of the tap-to-lock Keep/Revert bar (spike version covers the shoes zone); upload-gate copy for the folded-photo retake nudge (cofounder voice).
 
 ## 10. Explicitly out of scope
 

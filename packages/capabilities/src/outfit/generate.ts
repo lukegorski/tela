@@ -162,8 +162,9 @@ export const generateOutfits = registerCapability({
       throw new Error(`AI returned invalid outfits: ${parsed.error.message}`);
     }
 
-    // ─── Validate, dedupe, persist ───
+    // ─── Validate, reconcile, dedupe, persist ───
     const validItemIds = new Set(seasonRelevant.map((i) => i.id));
+    const categoryByItemId = new Map(seasonRelevant.map((i) => [i.id, i.category]));
     const savedOutfitIds: string[] = [];
     let duplicatesRejected = 0;
 
@@ -175,12 +176,19 @@ export const generateOutfits = registerCapability({
         continue;
       }
 
+      // Category is ground truth: correct AI roles that contradict it (P3).
+      const { items: reconciledItems, corrections } = reconcileRolesWithCategories(
+        candidate.items,
+        categoryByItemId,
+      );
+
       // Drop role-duplicates before inserting. Mirrors the partial unique
       // index on outfit_items (outfit_id, role) WHERE role != 'accessory'.
       // Without this the batch insert atomically rejects the whole outfit
       // if the AI emits two tops; with it, the first-per-role wins and
-      // generation still succeeds.
-      const dedupedItems = dedupeByRole(candidate.items);
+      // generation still succeeds. Runs AFTER reconciliation so corrected
+      // roles that now collide (the phantom-slot filler) get dropped here.
+      const dedupedItems = dedupeByRole(reconciledItems);
 
       // Compute pairing key from sorted (deduped) item IDs so identical
       // outfits — even after dedup — still hash to the same forbidden key.
@@ -217,10 +225,22 @@ export const generateOutfits = registerCapability({
         })),
       );
 
-      if (dedupedItems.length < candidate.items.length) {
-        const droppedRoles = candidate.items
-          .filter((_, idx) => !dedupedItems.includes(candidate.items[idx]))
-          .map((i) => i.role);
+      if (corrections.length > 0) {
+        await logEvent({
+          userId,
+          type: 'outfit.role_corrected',
+          source,
+          payload: {
+            outfitId: outfit.id,
+            generationId: result.provenance.generationId,
+            corrections,
+          },
+        });
+      }
+
+      if (dedupedItems.length < reconciledItems.length) {
+        const kept = new Set(dedupedItems);
+        const droppedRoles = reconciledItems.filter((i) => !kept.has(i)).map((i) => i.role);
         await logEvent({
           userId,
           type: 'outfit.role_duplicate_dropped',
@@ -228,7 +248,7 @@ export const generateOutfits = registerCapability({
           payload: {
             outfitId: outfit.id,
             generationId: result.provenance.generationId,
-            droppedCount: candidate.items.length - dedupedItems.length,
+            droppedCount: reconciledItems.length - dedupedItems.length,
             droppedRoles,
           },
         });
@@ -277,6 +297,34 @@ export const generateOutfits = registerCapability({
  * the partial unique index on outfit_items (outfit_id, role).
  */
 const REPEATABLE_ROLES = new Set(['accessory']);
+
+const ROLE_VALUES = new Set<string>(roleSchema.options);
+
+/**
+ * The closet category is ground truth for what a garment IS; the AI-emitted
+ * role is trusted only where the category doesn't map to a role. When an
+ * item's category is itself a valid role and the AI said otherwise, the
+ * category wins. Root-caused 2026-07-08 (followups P3): closets with zero
+ * shoes had real garments (t-shirts, a jacket) slotted as role='shoes' to
+ * satisfy the phantom slot. Corrections that produce a duplicate role are
+ * subsequently dropped by dedupeByRole — the item was redundant filler.
+ * Pure function so it's testable in isolation.
+ */
+export function reconcileRolesWithCategories<T extends { closetItemId: string; role: string }>(
+  items: T[],
+  categoryByItemId: Map<string, string>,
+): { items: T[]; corrections: Array<{ closetItemId: string; from: string; to: string }> } {
+  const corrections: Array<{ closetItemId: string; from: string; to: string }> = [];
+  const out = items.map((item) => {
+    const category = categoryByItemId.get(item.closetItemId);
+    if (category && category !== item.role && ROLE_VALUES.has(category)) {
+      corrections.push({ closetItemId: item.closetItemId, from: item.role, to: category });
+      return { ...item, role: category };
+    }
+    return item;
+  });
+  return { items: out, corrections };
+}
 
 /**
  * Keep the first occurrence of each non-repeatable role; let repeatable roles

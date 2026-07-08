@@ -330,6 +330,7 @@
     "loadError": "Kunne ikke laste garderoben din. Dra for å prøve igjen.",
     "save": "Lagre antrekk",
     "saveInvalid": "Velg overdel + underdel (eller en kjole)",
-    "saveSoon": "Lagring kommer i neste steg"
+    "saved": "Lagret i antrekkene dine",
+    "saveFailed": "Kunne ikke lagre — prøv igjen"
   }
 }

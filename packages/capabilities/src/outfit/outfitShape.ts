@@ -62,14 +62,15 @@ export const richOutfitTryOnSchema = z.object({
  */
 export const richOutfitSchema = z.object({
   id: z.string().uuid(),
-  generationId: z.string().uuid(),
-  contextId: z.string().uuid(),
+  generationId: z.string().uuid().nullable(),
+  contextId: z.string().uuid().nullable(),
   rationale: z.string().nullable(),
   name: z.string().nullable(),
   wardrobeAssessment: z.string().nullable(),
   pairingKey: z.string(),
-  occasion: z.string(),
-  season: z.string(),
+  source: z.enum(['ai', 'manual']),
+  occasion: z.string().nullable(),
+  season: z.string().nullable(),
   saved: z.boolean(),
   savedAt: z.string().nullable(),
   feedback: z.enum(['up', 'down']).nullable(),
@@ -85,8 +86,8 @@ export type RichOutfit = z.infer<typeof richOutfitSchema>;
 
 interface OutfitRow {
   id: string;
-  generationId: string;
-  contextId: string;
+  generationId: string | null;
+  contextId: string | null;
   rationale: string | null;
   name: string | null;
   wardrobeAssessment: string | null;
@@ -96,8 +97,9 @@ interface OutfitRow {
   feedback: string | null;
   wornAt: Date | null;
   createdAt: Date;
-  occasion: string;
-  season: string;
+  occasion: string | null;
+  season: string | null;
+  source: string;
 }
 
 interface ItemRow {
@@ -163,6 +165,7 @@ export async function fetchRichOutfits(opts: {
       name: outfits.name,
       wardrobeAssessment: outfits.wardrobeAssessment,
       pairingKey: outfits.pairingKey,
+      source: outfits.source,
       saved: outfits.saved,
       savedAt: outfits.savedAt,
       feedback: outfits.feedback,
@@ -172,7 +175,8 @@ export async function fetchRichOutfits(opts: {
       season: contexts.season,
     })
     .from(outfits)
-    .innerJoin(contexts, eq(contexts.id, outfits.contextId))
+    // leftJoin: manual outfits (builder v0) have no context row
+    .leftJoin(contexts, eq(contexts.id, outfits.contextId))
     .where(and(...conditions))
     .orderBy(desc(outfits[opts.orderBy ?? 'createdAt']));
 
@@ -301,6 +305,7 @@ export async function fetchRichOutfits(opts: {
     name: row.name,
     wardrobeAssessment: row.wardrobeAssessment,
     pairingKey: row.pairingKey,
+    source: (row.source === 'manual' ? 'manual' : 'ai') as 'ai' | 'manual',
     occasion: row.occasion,
     season: row.season,
     saved: row.saved,

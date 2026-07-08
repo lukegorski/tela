@@ -330,6 +330,7 @@
     "loadError": "Não foi possível carregar seu guarda-roupa. Deslize para tentar de novo.",
     "save": "Salvar look",
     "saveInvalid": "Escolha cima + baixo (ou um vestido)",
-    "saveSoon": "Salvar chega na próxima etapa"
+    "saved": "Salvo nos seus looks",
+    "saveFailed": "Não foi possível salvar — tente novamente"
   }
 }

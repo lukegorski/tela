@@ -35,6 +35,7 @@ type OutfitEvent =
   | 'outfit.role_corrected' // AI role contradicted closet category; category won at insert (P3 root-cause fix)
   | 'outfit.builder_opened' // builder canvas mounted (restored_draft, cutouts_ready)
   | 'outfit.builder_session_ended' // client-reported; cross-check vs draft-save deltas (spec §7 reliability rule)
+  | 'outfit.manual_saved' // builder v0 save (composition, had_shoes, dress_mode)
   | 'outfit.worn_confirmed'
   | 'outfit.worn_inferred';
 

@@ -330,6 +330,7 @@
     "loadError": "Kleiderschrank konnte nicht geladen werden. Zum Wiederholen ziehen.",
     "save": "Outfit speichern",
     "saveInvalid": "Wähle Oberteil + Unterteil (oder ein Kleid)",
-    "saveSoon": "Speichern kommt im nächsten Schritt"
+    "saved": "In deinen Outfits gespeichert",
+    "saveFailed": "Speichern fehlgeschlagen — bitte erneut versuchen"
   }
 }

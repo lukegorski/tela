@@ -330,6 +330,7 @@
     "loadError": "Couldn't load your wardrobe. Pull to retry.",
     "save": "Save outfit",
     "saveInvalid": "Pick a top + bottom (or a dress)",
-    "saveSoon": "Saving arrives in the next build step"
+    "saved": "Saved to your outfits",
+    "saveFailed": "Couldn't save — try again"
   }
 }

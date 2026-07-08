@@ -330,6 +330,7 @@
     "loadError": "Impossible de charger votre garde-robe. Balayez pour réessayer.",
     "save": "Enregistrer la tenue",
     "saveInvalid": "Choisissez un haut + un bas (ou une robe)",
-    "saveSoon": "L'enregistrement arrive à la prochaine étape"
+    "saved": "Enregistré dans vos tenues",
+    "saveFailed": "Échec de l'enregistrement — réessayez"
   }
 }

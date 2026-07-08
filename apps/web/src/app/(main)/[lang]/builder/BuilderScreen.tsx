@@ -126,6 +126,11 @@ export default function BuilderScreen() {
   const [dress, setDress] = useState({ active: false, idx: 0 });
   const [browse, setBrowse] = useState<{ zone: ZoneId; pos: number } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  // Post-save semantics (spec §3 recommendation): keep the composition,
+  // disable Save until it changes again.
+  const [savedComposition, setSavedComposition] = useState<string | null>(null);
+  const savedThisSession = useRef(false);
   const restored = useRef(false);
   const cycleCounts = useRef<Record<string, number>>({});
   const addPrompted = useRef<Set<string>>(new Set());
@@ -218,6 +223,9 @@ export default function BuilderScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sel, dress]);
 
+  const savedRef = useRef(false);
+  savedRef.current = savedThisSession.current;
+
   // ─── Session summary on tab-hide (lossy by nature; cross-checked server-side) ───
   useEffect(() => {
     const report = () => {
@@ -227,7 +235,7 @@ export default function BuilderScreen() {
         input: {
           durationMs: Date.now() - sessionStart.current,
           cycleCounts: cycleCounts.current,
-          saved: false,
+          saved: savedRef.current,
           addPromptedSlots: [...addPrompted.current],
         },
       });
@@ -381,6 +389,94 @@ export default function BuilderScreen() {
   const valid = dressShowing || (!!visible.top && !!visible.bottom);
   const browsingItem = browse ? entryAt(browse.zone, browse.pos) : null;
 
+  // Post-save semantics: fingerprint the committed composition; Save
+  // re-enables only when it changes (spec §3 recommendation).
+  const compositionKey = JSON.stringify({
+    d: dressShowing ? (visible.dress?.itemId ?? null) : null,
+    t: dressShowing ? null : (visible.top?.itemId ?? null),
+    b: dressShowing ? null : (visible.bottom?.itemId ?? null),
+    o: visible.outerwear?.itemId ?? null,
+    s: visible.shoes?.itemId ?? null,
+  });
+  const alreadySaved = savedComposition === compositionKey;
+
+  /** Draw the committed composition at card resolution → base64 + mime. */
+  const exportCard = async (): Promise<{ base64: string; mime: string } | null> => {
+    try {
+      const W = 900;
+      const H = 1200;
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.fillStyle = '#fafafa';
+      ctx.fillRect(0, 0, W, H);
+
+      const cardRects = placeOutfit(
+        {
+          top: slotInput(visible.top ?? null),
+          bottom: slotInput(visible.bottom ?? null),
+          outerwear: slotInput(visible.outerwear ?? null),
+          shoes: slotInput(visible.shoes ?? null),
+          dress: slotInput(visible.dress ?? null),
+        },
+        W,
+        H,
+      );
+      const ordered = (Object.entries(visible) as Array<[BuilderRole, BuilderItem]>).sort(
+        (a, b) => (cardRects[a[0]]?.z ?? 0) - (cardRects[b[0]]?.z ?? 0),
+      );
+      for (const [role, item] of ordered) {
+        const r = cardRects[role];
+        const src = item.cutoutUrl ?? item.fallbackUrl;
+        if (!r || !src) continue;
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = src;
+        await img.decode();
+        ctx.drawImage(img, r.left, r.top, r.drawW, r.drawH);
+      }
+
+      const dataUrl = canvas.toDataURL('image/webp', 0.82);
+      // Safari has no webp encoder and silently falls back to png.
+      const mime = dataUrl.startsWith('data:image/webp') ? 'image/webp' : 'image/png';
+      const base64 = dataUrl.split(',')[1];
+      if (!base64 || base64.length > 1_300_000) return null;
+      return { base64, mime };
+    } catch {
+      return null; // card is best-effort; the save proceeds without it
+    }
+  };
+
+  const handleSave = async () => {
+    if (!valid || saving || alreadySaved || browse) return;
+    setSaving(true);
+    try {
+      const card = await exportCard();
+      await executeRef.current.mutateAsync({
+        name: 'outfit.createManual',
+        input: {
+          slots: {
+            top: dressShowing ? null : (visible.top?.itemId ?? null),
+            bottom: dressShowing ? null : (visible.bottom?.itemId ?? null),
+            outerwear: visible.outerwear?.itemId ?? null,
+            shoes: visible.shoes?.itemId ?? null,
+            dress: dressShowing ? (visible.dress?.itemId ?? null) : null,
+          },
+          ...(card ? { cardImageBase64: card.base64, cardImageMime: card.mime } : {}),
+        },
+      });
+      savedThisSession.current = true;
+      setSavedComposition(compositionKey);
+      setToast(t.saved);
+    } catch {
+      setToast(t.saveFailed);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // ─── Render ───
   if (!userId || query.isPending) {
     return (
@@ -455,6 +551,7 @@ export default function BuilderScreen() {
                       <img
                         key={item.itemId}
                         src={item.cutoutUrl ?? item.fallbackUrl ?? ''}
+                        crossOrigin="anonymous"
                         alt={`${item.primaryColor} ${item.subcategory ?? role}`}
                         data-testid={`builder-item-${role}`}
                         className={`absolute pointer-events-none [filter:drop-shadow(0_8px_12px_rgba(40,32,18,0.14))] ${isBrowse ? 'opacity-55' : ''}`}
@@ -554,12 +651,12 @@ export default function BuilderScreen() {
         </div>
 
         <button
-          disabled={!valid}
+          disabled={!valid || saving || alreadySaved || !!browse}
           data-testid="save-btn"
-          onClick={() => setToast(t.saveSoon) /* wired in Phase 4: outfit.createManual */}
+          onClick={handleSave}
           className="w-full mb-4 px-4 py-3 bg-stone-700 text-stone-50 rounded-none text-sm font-medium tracking-wide uppercase hover:bg-stone-600 transition-colors disabled:bg-stone-200 disabled:text-stone-400 dark:bg-stone-300 dark:text-stone-900 dark:hover:bg-stone-400 dark:disabled:bg-neutral-800 dark:disabled:text-neutral-600"
         >
-          {valid ? t.save : t.saveInvalid}
+          {!valid ? t.saveInvalid : alreadySaved ? t.saved : saving ? '…' : t.save}
         </button>
       </div>
     </div>

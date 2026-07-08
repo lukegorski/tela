@@ -330,6 +330,7 @@
     "loadError": "Vaatekaappia ei voitu ladata. Vedä yrittääksesi uudelleen.",
     "save": "Tallenna asu",
     "saveInvalid": "Valitse yläosa + alaosa (tai mekko)",
-    "saveSoon": "Tallennus tulee seuraavassa vaiheessa"
+    "saved": "Tallennettu asuihisi",
+    "saveFailed": "Tallennus epäonnistui — yritä uudelleen"
   }
 }

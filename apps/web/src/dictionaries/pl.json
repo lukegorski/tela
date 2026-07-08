@@ -330,6 +330,7 @@
     "loadError": "Nie udało się wczytać szafy. Przeciągnij, aby spróbować ponownie.",
     "save": "Zapisz strój",
     "saveInvalid": "Wybierz górę + dół (lub sukienkę)",
-    "saveSoon": "Zapisywanie pojawi się w następnym kroku"
+    "saved": "Zapisano w Twoich strojach",
+    "saveFailed": "Nie udało się zapisać — spróbuj ponownie"
   }
 }

@@ -330,6 +330,7 @@
     "loadError": "No pudimos cargar tu armario. Desliza para reintentar.",
     "save": "Guardar outfit",
     "saveInvalid": "Elige arriba + abajo (o un vestido)",
-    "saveSoon": "Guardar llegará en el próximo paso"
+    "saved": "Guardado en tus outfits",
+    "saveFailed": "No se pudo guardar — inténtalo de nuevo"
   }
 }

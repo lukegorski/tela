@@ -330,6 +330,7 @@
     "loadError": "Tidak dapat memuatkan almari anda. Tarik untuk cuba lagi.",
     "save": "Simpan gaya",
     "saveInvalid": "Pilih atasan + bawahan (atau gaun)",
-    "saveSoon": "Simpanan akan tiba pada langkah seterusnya"
+    "saved": "Disimpan dalam gaya anda",
+    "saveFailed": "Tidak dapat menyimpan — cuba lagi"
   }
 }

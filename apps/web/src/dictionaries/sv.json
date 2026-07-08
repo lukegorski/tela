@@ -330,6 +330,7 @@
     "loadError": "Kunde inte ladda din garderob. Dra för att försöka igen.",
     "save": "Spara outfit",
     "saveInvalid": "Välj överdel + underdel (eller en klänning)",
-    "saveSoon": "Sparande kommer i nästa steg"
+    "saved": "Sparad bland dina outfits",
+    "saveFailed": "Kunde inte spara — försök igen"
   }
 }

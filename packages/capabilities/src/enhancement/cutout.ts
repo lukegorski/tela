@@ -95,7 +95,7 @@ export const cutoutPhoto = registerCapability({
 
       await db
         .update(itemPhotos)
-        .set({ cutoutStoragePath: cutoutPath })
+        .set({ cutoutStoragePath: cutoutPath, cutoutTrim: cutout.trim })
         .where(eq(itemPhotos.id, photoId));
 
       await logEvent({

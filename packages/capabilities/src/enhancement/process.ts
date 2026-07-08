@@ -170,6 +170,7 @@ export const processEnhancement = registerCapability({
           enhancementStatus: 'complete',
           enhancedStoragePath: enhancedPath,
           cutoutStoragePath: null,
+          cutoutTrim: null,
           backgroundColor: bg.median,
           enhancedAt: new Date(),
           enhancementError: null,

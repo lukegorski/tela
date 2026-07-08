@@ -1,0 +1,1 @@
+ALTER TABLE "item_photos" ADD COLUMN "cutout_trim" jsonb;

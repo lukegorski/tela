@@ -36,12 +36,45 @@ const require2 = createRequire(import.meta.url);
 // blocked by the package's exports map.)
 const IMGLY_DIST_URL = pathToFileURL(dirname(require2.resolve('@imgly/background-removal-node'))).href + '/';
 
+export interface CutoutTrim {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  imgW: number;
+  imgH: number;
+}
+
 export interface CutoutResult {
   webp: Buffer;
   /** Share of pixels fully transparent after the curve — sanity signal. */
   transparentShare: number;
   width: number;
   height: number;
+  /** Opaque bbox (alpha > 16) — the builder recipe's placement box; null if fully transparent. */
+  trim: CutoutTrim | null;
+}
+
+/**
+ * Opaque-pixel bounding box at alpha > 16. Pure — unit-tested.
+ */
+export function computeTrim(rgba: Buffer, width: number, height: number): CutoutTrim | null {
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (rgba[(y * width + x) * 4 + 3] > 16) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < 0) return null;
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1, imgW: width, imgH: height };
 }
 
 /**
@@ -59,6 +92,7 @@ export async function cutoutImage(enhancedJpeg: Buffer): Promise<CutoutResult> {
 
   let transparent = 0;
   for (let i = 3; i < data.length; i += 4) if (data[i] === 0) transparent++;
+  const trim = computeTrim(data, info.width, info.height);
 
   const webp = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
     .webp({ quality: 90 })
@@ -69,5 +103,6 @@ export async function cutoutImage(enhancedJpeg: Buffer): Promise<CutoutResult> {
     transparentShare: transparent / (info.width * info.height),
     width: info.width,
     height: info.height,
+    trim,
   };
 }

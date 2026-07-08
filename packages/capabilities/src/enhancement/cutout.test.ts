@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyAlphaCurve, ALPHA_LO, ALPHA_HI } from './cutoutImage.js';
+import { applyAlphaCurve, computeTrim, ALPHA_LO, ALPHA_HI } from './cutoutImage.js';
 import { cutoutEligibility } from './cutout.js';
 
 function rgbaWithAlphas(alphas: number[]): Buffer {
@@ -35,6 +35,30 @@ describe('applyAlphaCurve (spike-locked: LO=70, HI=190)', () => {
     const out = applyAlphaCurve(rgbaWithAlphas([10, 200]));
     expect(out[0]).toBe(128);
     expect(out[4]).toBe(128);
+  });
+});
+
+describe('computeTrim', () => {
+  // 4×3 image, opaque block at x∈[1,2], y∈[1,1]
+  function grid(width: number, height: number, opaque: Array<[number, number]>): Buffer {
+    const buf = Buffer.alloc(width * height * 4);
+    for (const [x, y] of opaque) buf[(y * width + x) * 4 + 3] = 255;
+    return buf;
+  }
+
+  it('finds the opaque bounding box', () => {
+    const trim = computeTrim(grid(4, 3, [[1, 1], [2, 1]]), 4, 3);
+    expect(trim).toEqual({ x: 1, y: 1, w: 2, h: 1, imgW: 4, imgH: 3 });
+  });
+
+  it('ignores near-transparent pixels (alpha ≤ 16)', () => {
+    const buf = grid(4, 3, [[2, 2]]);
+    buf[(0 * 4 + 0) * 4 + 3] = 16; // below threshold — must not extend the box
+    expect(computeTrim(buf, 4, 3)).toEqual({ x: 2, y: 2, w: 1, h: 1, imgW: 4, imgH: 3 });
+  });
+
+  it('returns null for a fully transparent image', () => {
+    expect(computeTrim(grid(4, 3, []), 4, 3)).toBeNull();
   });
 });
 

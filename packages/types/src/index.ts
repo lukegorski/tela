@@ -283,3 +283,5 @@ export interface CapabilityError {
 }
 
 export type CapabilityResponse<T> = CapabilityResult<T> | CapabilityError;
+
+export * from './builderRecipe.js';

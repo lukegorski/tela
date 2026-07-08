@@ -12,6 +12,7 @@ type WardrobeEvent =
   | 'wardrobe.item_worn'
   | 'wardrobe.item_viewed' // selective
   | 'wardrobe.closet_viewed' // selective
+  | 'wardrobe.add_prompted_from_builder' // empty builder slot nudged the user into upload (spec §7)
   | 'wardrobe.photo_uploaded';
 
 // Profile domain
@@ -32,6 +33,8 @@ type OutfitEvent =
   | 'outfit.deleted'
   | 'outfit.role_duplicate_dropped' // AI emitted duplicate role; insertion dedup dropped extras pre-insert
   | 'outfit.role_corrected' // AI role contradicted closet category; category won at insert (P3 root-cause fix)
+  | 'outfit.builder_opened' // builder canvas mounted (restored_draft, cutouts_ready)
+  | 'outfit.builder_session_ended' // client-reported; cross-check vs draft-save deltas (spec §7 reliability rule)
   | 'outfit.worn_confirmed'
   | 'outfit.worn_inferred';
 

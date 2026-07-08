@@ -159,12 +159,17 @@ export const processEnhancement = registerCapability({
         throw new Error(`Failed to upload enhanced photo: ${uploadErr.message}`);
       }
 
-      // Update photo row → complete
+      // Update photo row → complete. A new enhanced image INVALIDATES any
+      // existing cutout (it derives from the enhanced pixels) — null the
+      // path so the cutout job enqueued below regenerates instead of
+      // skipping as 'already_done'. The storage file is overwritten in
+      // place on regeneration (deterministic path, upsert).
       await db
         .update(itemPhotos)
         .set({
           enhancementStatus: 'complete',
           enhancedStoragePath: enhancedPath,
+          cutoutStoragePath: null,
           backgroundColor: bg.median,
           enhancedAt: new Date(),
           enhancementError: null,

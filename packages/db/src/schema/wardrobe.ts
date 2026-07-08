@@ -45,6 +45,13 @@ export const itemPhotos = pgTable('item_photos', {
   enhancementError: varchar('enhancement_error', { length: 500 }),
   enhancementAttempts: integer('enhancement_attempts').notNull().default(0),
   enhancedStoragePath: varchar('enhanced_storage_path', { length: 1024 }),
+  /**
+   * Transparent cutout (WebP-with-alpha) derived from the enhanced photo by
+   * enhancement.cutout (spec §4: local background removal + alpha curve).
+   * Convention: `${storagePath}.cutout.webp`. Null until generated; the
+   * builder falls back to the enhanced JPEG while pending.
+   */
+  cutoutStoragePath: varchar('cutout_storage_path', { length: 1024 }),
   /** Detected background color from the enhanced image, e.g. "#f5f5f5" — for UI cards */
   backgroundColor: varchar('background_color', { length: 7 }),
   enhancedAt: timestamp('enhanced_at', { withTimezone: true }),

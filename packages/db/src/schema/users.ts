@@ -79,6 +79,15 @@ export const users = pgTable(
      */
     isAdmin: boolean('is_admin').notNull().default(false),
 
+    // ─── Feature flags (builder v0, spec §5) ───
+    /**
+     * Per-user feature flags, e.g. { "builder": true }. NEVER read directly
+     * by gates — every gate goes through deriveEntitlements() (the
+     * entitlements choke point), so future billing swaps the derivation,
+     * not the gates. Flipped via scripts in beta; admin UI arrives in v1.
+     */
+    features: jsonb('features').$type<Record<string, unknown>>().notNull().default({}),
+
     // ─── Onboarding state (Phase 8.4) ───
     onboardingComplete: boolean('onboarding_complete').notNull().default(false),
     /** Style quiz preferences. Null until onboarding finished. */

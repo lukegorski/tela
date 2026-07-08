@@ -64,7 +64,7 @@ export const richOutfitSchema = z.object({
   id: z.string().uuid(),
   generationId: z.string().uuid(),
   contextId: z.string().uuid(),
-  rationale: z.string(),
+  rationale: z.string().nullable(),
   name: z.string().nullable(),
   wardrobeAssessment: z.string().nullable(),
   pairingKey: z.string(),
@@ -87,7 +87,7 @@ interface OutfitRow {
   id: string;
   generationId: string;
   contextId: string;
-  rationale: string;
+  rationale: string | null;
   name: string | null;
   wardrobeAssessment: string | null;
   pairingKey: string;

@@ -157,7 +157,7 @@ Each phase = a session prompt in `docs/session-prompts/` (house pattern: verifie
 **Answered by the v-1 spike (Luke + cofounder, 2026-07-07):** cutout method → local lib + alpha curve (#8); canvas → invisible mannequin (#9); dress pattern → fluid (#10); selection semantics → tap-to-lock (#11).
 **Luke + cofounder, before v1:** naming/copy for builder + premium tier; whether free users post-beta keep founder-era AI outfits visible (recommendation: yes — goodwill + they showcase premium).
 **Settled post-dogfood (Luke, 2026-07-07):** silhouette → fully invisible (#9); sizing approach → §3 "Sizing & proportion" tiers.
-**v0 design review:** post-save draft semantics (§3 recommendation: keep + disable Save until changed); polish of the tap-to-lock Keep/Revert bar (spike version covers the shoes zone); upload-gate copy for the folded-photo retake nudge (cofounder voice); Tier-0 sizing multiplier values (eyeball on the founder A/B grid).
+**v0 design review:** post-save draft semantics (§3 recommendation: keep + disable Save until changed); polish of the tap-to-lock Keep/Revert bar (spike version covers the shoes zone); upload-gate copy for the folded-photo retake nudge (cofounder voice); Tier-0 sizing multiplier values (eyeball on the founder A/B grid); dark-mode canvas treatment (dark garments vanish on `neutral-900` — light canvas plate is the candidate); success-toast pattern (app has only error toasts); pinch-zoom vs canvas gestures (a11y); canvas garment-shadow art direction (design-system audit 2026-07-07: prototype restyle skipped by Luke's call — v0 builds to the app system directly, see the v0 session prompt's compliance section).
 
 ## 10. Explicitly out of scope
 

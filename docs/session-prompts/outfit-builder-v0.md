@@ -12,9 +12,25 @@
 
 Ship the manual builder core to main, **DARK**, behind the entitlements choke point — usable end-to-end by both founders on real phones: browse cutouts on the invisible mannequin → fluid dress + tap-to-lock → autosaved server-side draft → save as a manual outfit with a card snapshot in the grid. **No render button, no premium surfaces, no IA changes, no links from existing UI.** Increments merge to main through the normal review-then-push cadence (§8a trunk-based dark shipping; every push needs Luke's approval).
 
+**The existing outfits page is untouchable (Luke, explicit, 2026-07-07).** It ships byte-identical through v0 AND v1 — the builder lives at its own route, reachable only by direct URL + flag, and the two coexist. Replacing the outfits page is a separate one-commit IA flip (spec §8a #1), decided only after founders have built, saved, and lived with real outfits in the new builder. If any task in this session seems to require editing the outfits page or its components: STOP, it doesn't.
+
 ## Ship bar (this is NOT the spike)
 
 Production quality: TypeScript strict; unit tests for pure logic (entitlements truth table, recipe placement math, draft restore tolerances); all strings through the 14 locale dictionaries (new keys only); events wired; fail-open where specced. **Shared-surface whitelist (§8a) — the ONLY existing files you may edit:** the 14 locale dictionaries (new keys), the enhancement flow's additive fail-open cutout hook, the prompts registry (new prompt VERSION, never in-place). Everything else: new files only. Any exception: STOP and ask Luke.
+
+## Design-system compliance (the spike ignored this by license; v0 may not)
+
+The prototype's styling is throwaway — audited 2026-07-07 as sharing no visual DNA with the app; Luke chose NOT to restyle it and to hold v0 to the real system instead. Tailwind v4 utilities only (no bespoke stylesheets beyond what canvas math strictly needs). Copy conventions from the canonical files, never from the spike:
+
+- **Reference files:** `apps/web/src/app/globals.css` (tokens, animations, `.dark` custom variant, `pb-safe`); `(main)/[lang]/layout.tsx` (Inter via `--font-inter` + pre-hydration theme bootstrap); `components/OutfitCard.tsx` (cards: `rounded-2xl border border-neutral-200 dark:border-neutral-700`, flat — chrome never gets drop shadows); `components/ColorFilterChips.tsx` (chips: `rounded-none border-2`, stone palette); `components/BottomSheet.tsx` (sheet + 450ms motion); `components/MobileNav.tsx` (safe-area, icon sizing).
+- **Type:** `font-sans` (Inter). Page titles `text-sm font-semibold tracking-widest uppercase`; section labels `text-xs font-semibold uppercase tracking-widest`; body `text-sm`.
+- **Actions:** primary = `bg-stone-700 text-stone-50 rounded-none text-xs font-medium tracking-wide uppercase` + dark inversions (`dark:bg-stone-300 dark:text-stone-900`). The spike's pill segmented controls die with the spike; any real mode UI uses the chip pattern.
+- **Icons:** inline SVG, `stroke=1.5`, `currentColor`, round caps — including carousel chevrons (no text glyphs).
+- **Dark mode:** full `.dark` coverage from day one (bootstrap is already global). Note the open design question below — dark cutouts on `neutral-900` vanish.
+- **Loading:** cutout-pending states use the app's skeleton/shimmer language (`animate-pulse bg-stone-100 dark:bg-neutral-800`, `shimmer-bg`) — not spinners on white.
+- **Feedback:** errors follow the existing `bg-red-500/90 backdrop-blur-sm rounded-xl` toast; a SUCCESS toast has no app precedent — define it in design review before building.
+- **Motion:** reuse app timings (150ms colors / 250ms panels / 450ms sheets, ease-out family). The spike's flip animation (~260ms custom bezier) is new vocabulary worth keeping — codify its constants next to the recipe module.
+- **Canvas art direction vs chrome:** garment drop-shadows INSIDE the canvas are what makes the paper-doll read physical — keep them (design-review confirms); everything outside the canvas is flat-and-bordered per app convention.
 
 ## Phase 0 — prerequisites (before any builder code)
 
@@ -56,7 +72,7 @@ Production quality: TypeScript strict; unit tests for pure logic (entitlements t
 
 - Flip `features.builder` for Luke + cofounder (script). Dark deploys ride the normal push cadence.
 - Real-phone verification by both founders: flipping feel + cutout quality at scale, fluid dress, tap-to-lock, draft restore across two devices, save → card in grid, first-open cutout latency.
-- **STOP. Report dogfood findings + the design-review decisions (silhouette opacity, post-save semantics, Keep/Revert polish, gate copy). v1 (render + quota + premium scaffolding) gets its own session prompt only on Luke's word.**
+- **STOP. Report dogfood findings + the design-review decisions: post-save semantics, Keep/Revert polish, upload-gate copy, Tier-0 sizing values (A/B grid), dark-mode canvas treatment (garment visibility on `neutral-900` — light canvas plate is the candidate), success-toast pattern, pinch-zoom vs gesture control (a11y — the spike silently disabled zoom; don't ship that without a decision). v1 (render + quota + premium scaffolding) gets its own session prompt only on Luke's word.**
 
 ## Operating constraints (non-negotiable)
 

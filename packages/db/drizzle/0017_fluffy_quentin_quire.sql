@@ -1,0 +1,1 @@
+ALTER TABLE "closet_items" ADD COLUMN "presentation" varchar(10);

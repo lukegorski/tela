@@ -27,6 +27,10 @@ const metadata = z.object({
   material: z.string().nullable(),
   seasonCompatibility: z.array(z.enum(['spring', 'summer', 'fall', 'winter'])),
   description: z.string(),
+  // Tolerant parse: a missing/garbled presentation must never fail the whole
+  // analysis (upload flow depends on it) — null means "not classified",
+  // backfilled lazily. Values per spec §2a #12.
+  presentation: z.enum(['flat', 'folded', 'angled']).nullable().catch(null),
 });
 
 const output = z.object({

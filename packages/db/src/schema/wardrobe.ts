@@ -67,6 +67,13 @@ export const closetItems = pgTable(
     enhancedPhotoId: uuid('enhanced_photo_id').references(() => itemPhotos.id),
     backgroundColor: varchar('background_color', { length: 7 }),
     analysisLocale: varchar('analysis_locale', { length: 10 }).notNull().default('en'),
+    /**
+     * How the garment is presented in its photo, classified by item.analyze
+     * (spec §2a #12): 'flat' (worn shape visible — product-style/hanger ok),
+     * 'folded' (folded/stacked/crumpled — excluded from the outfit builder
+     * until retaken), 'angled' (skewed shot). NULL = not yet classified.
+     */
+    presentation: varchar('presentation', { length: 10 }),
 
     // Classification
     category: varchar('category', { length: 100 }).notNull(),

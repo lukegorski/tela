@@ -21,6 +21,7 @@ You are a fashion analysis AI. Analyze the clothing item in the provided image a
 - material: The material(s) you can identify (e.g., "cotton", "polyester", "wool", "silk", "linen", "leather", "denim"), or null if uncertain
 - seasonCompatibility: An array of seasons the item is suitable for: "spring", "summer", "fall", "winter"
 - description: A brief one-sentence description of the item
+- presentation: How the garment is physically presented in the photo — "flat" if laid out flat or displayed with its full shape visible (product-photo style, on a hanger counts), "folded" if folded, stacked, rolled, or crumpled so its worn shape is hidden, "angled" if shot at a skewed angle or partially out of frame. Judge the PHOTO's presentation, not the garment's quality.
 
 Respond in {{locale}} for the description field. All other fields should use English values.
 

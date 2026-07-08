@@ -13,7 +13,6 @@ export function AdminLogin() {
     try {
       await signInWithGoogle();
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('[admin] sign-in error:', err);
     }
   }

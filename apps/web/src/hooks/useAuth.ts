@@ -196,7 +196,6 @@ export function useAuth(): UseAuthReturn {
     // the event normally fires within 50-200ms.
     const fallbackTimer = setTimeout(() => {
       if (mounted && !initialEventReceived) {
-        // eslint-disable-next-line no-console
         console.warn(
           '[useAuth] onAuthStateChange INITIAL_SESSION did not fire within 2s — proceeding as anonymous',
         );

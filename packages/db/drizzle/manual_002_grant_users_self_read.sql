@@ -1,0 +1,21 @@
+-- Builder v0: allow the `authenticated` role to read its OWN users row via
+-- PostgREST (applied to the live DB 2026-07-13).
+--
+-- BACKGROUND
+-- manual_001 enabled RLS + self-row SELECT policies, but policies only
+-- apply AFTER base table privileges — and `authenticated` was never
+-- GRANTed SELECT on public.users (all reads went through the API's
+-- service-role connection, which bypasses both). The builder route's
+-- server-side entitlements gate (apps/web .../builder/page.tsx) is the
+-- first authenticated PostgREST read in the app; without this grant it
+-- failed closed ("permission denied for table users") and redirected
+-- entitled founders away.
+--
+-- Column-level grant: exactly what the gate needs — the RLS policy
+-- (users_self_select: id = app_user_id()) still confines visibility to
+-- the caller's own row.
+--
+-- HOW TO REVERT
+--   REVOKE SELECT (id, auth_user_id, features) ON public.users FROM authenticated;
+
+GRANT SELECT (id, auth_user_id, features) ON public.users TO authenticated;

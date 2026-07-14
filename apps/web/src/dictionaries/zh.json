@@ -326,6 +326,8 @@
     "swipeHint": "滑动区域浏览 · 点按保留",
     "emptyWardrobe": "搭配器需要上装和下装。添加几件单品开始搭配吧。",
     "addItems": "添加单品",
+    "foldedNoticeOne": "1 件单品需要重新拍摄后才能显示在这里",
+    "foldedNoticeMany": "{count} 件单品需要重新拍摄后才能显示在这里",
     "itemsMissing": "部分已保存的单品已不可用",
     "loadError": "无法加载你的衣橱。下拉重试。",
     "save": "保存穿搭",

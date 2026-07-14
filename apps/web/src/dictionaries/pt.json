@@ -326,6 +326,8 @@
     "swipeHint": "Deslize uma zona para explorar · toque para manter",
     "emptyWardrobe": "O criador precisa de partes de cima e de baixo. Adicione algumas peças para começar.",
     "addItems": "Adicionar peças",
+    "foldedNoticeOne": "1 peça precisa de uma nova foto para aparecer aqui",
+    "foldedNoticeMany": "{count} peças precisam de uma nova foto para aparecer aqui",
     "itemsMissing": "Algumas peças salvas não estão mais disponíveis",
     "loadError": "Não foi possível carregar seu guarda-roupa. Deslize para tentar de novo.",
     "save": "Salvar look",

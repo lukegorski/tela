@@ -326,6 +326,8 @@
     "swipeHint": "Desliza una zona para explorar · toca para quedarte",
     "emptyWardrobe": "El creador necesita partes de arriba y de abajo. Añade algunas prendas para empezar.",
     "addItems": "Añadir prendas",
+    "foldedNoticeOne": "1 prenda necesita una nueva foto para aparecer aquí",
+    "foldedNoticeMany": "{count} prendas necesitan una nueva foto para aparecer aquí",
     "itemsMissing": "Algunas prendas guardadas ya no están disponibles",
     "loadError": "No pudimos cargar tu armario. Desliza para reintentar.",
     "save": "Guardar outfit",

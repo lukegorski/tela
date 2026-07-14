@@ -326,6 +326,8 @@
     "swipeHint": "Svep en zon för att bläddra · tryck för att behålla",
     "emptyWardrobe": "Byggaren behöver över- och underdelar. Lägg till några plagg för att börja.",
     "addItems": "Lägg till plagg",
+    "foldedNoticeOne": "1 plagg behöver ett nytt foto för att visas här",
+    "foldedNoticeMany": "{count} plagg behöver nya foton för att visas här",
     "itemsMissing": "Vissa sparade plagg är inte längre tillgängliga",
     "loadError": "Kunde inte ladda din garderob. Dra för att försöka igen.",
     "save": "Spara outfit",

@@ -42,6 +42,8 @@ const output = z.object({
   draftSlots: z.record(z.string(), z.unknown()).nullable(),
   /** True when every eligible item has a cutout. */
   cutoutsReady: z.boolean(),
+  /** Items hidden from the builder because their photo is folded (spec #12) — never removed from the closet. */
+  excludedFolded: z.number().int().min(0),
 });
 
 /**
@@ -92,8 +94,12 @@ export const builderItems = registerCapability({
     // joined against both their original and enhanced photo rows,
     // preferring the row that carries the enhanced image.
     const byItem = new Map<string, (typeof rows)[number]>();
+    const foldedItemIds = new Set<string>();
     for (const row of rows) {
-      if (row.presentation === 'folded') continue;
+      if (row.presentation === 'folded') {
+        foldedItemIds.add(row.itemId);
+        continue;
+      }
       const existing = byItem.get(row.itemId);
       if (!existing || (!existing.enhancedStoragePath && row.enhancedStoragePath)) {
         byItem.set(row.itemId, row);
@@ -159,6 +165,7 @@ export const builderItems = registerCapability({
         cutouts_ready: cutoutsReady,
         itemCount: items.length,
         pendingCutouts: missing.length,
+        excludedFolded: foldedItemIds.size,
       },
     });
 
@@ -166,6 +173,7 @@ export const builderItems = registerCapability({
       items,
       draftSlots: (draft?.slots as Record<string, unknown> | undefined) ?? null,
       cutoutsReady,
+      excludedFolded: foldedItemIds.size,
     };
   },
 });

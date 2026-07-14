@@ -326,6 +326,8 @@
     "swipeHint": "Swipe a zone to browse · tap to keep",
     "emptyWardrobe": "Your builder needs tops and bottoms. Add a few pieces to start styling.",
     "addItems": "Add items",
+    "foldedNoticeOne": "1 piece needs a retake to appear here",
+    "foldedNoticeMany": "{count} pieces need a retake to appear here",
     "itemsMissing": "Some saved items are no longer available",
     "loadError": "Couldn't load your wardrobe. Pull to retry.",
     "save": "Save outfit",

@@ -326,6 +326,8 @@
     "swipeHint": "Pyyhkäise aluetta selataksesi · napauta pitääksesi",
     "emptyWardrobe": "Rakentaja tarvitsee ylä- ja alaosia. Lisää muutama vaate aloittaaksesi.",
     "addItems": "Lisää vaatteita",
+    "foldedNoticeOne": "1 vaate tarvitsee uuden kuvan näkyäkseen täällä",
+    "foldedNoticeMany": "{count} vaatetta tarvitsee uuden kuvan näkyäkseen täällä",
     "itemsMissing": "Osa tallennetuista vaatteista ei ole enää saatavilla",
     "loadError": "Vaatekaappia ei voitu ladata. Vedä yrittääksesi uudelleen.",
     "save": "Tallenna asu",

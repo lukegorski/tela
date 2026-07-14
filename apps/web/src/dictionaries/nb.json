@@ -326,6 +326,8 @@
     "swipeHint": "Sveip en sone for å bla · trykk for å beholde",
     "emptyWardrobe": "Byggeren trenger over- og underdeler. Legg til noen plagg for å starte.",
     "addItems": "Legg til plagg",
+    "foldedNoticeOne": "1 plagg trenger et nytt bilde for å vises her",
+    "foldedNoticeMany": "{count} plagg trenger nye bilder for å vises her",
     "itemsMissing": "Noen lagrede plagg er ikke lenger tilgjengelige",
     "loadError": "Kunne ikke laste garderoben din. Dra for å prøve igjen.",
     "save": "Lagre antrekk",

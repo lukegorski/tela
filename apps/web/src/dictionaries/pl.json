@@ -326,6 +326,8 @@
     "swipeHint": "Przesuń strefę, aby przeglądać · dotknij, aby zostawić",
     "emptyWardrobe": "Kreator potrzebuje góry i dołu. Dodaj kilka ubrań, aby zacząć.",
     "addItems": "Dodaj ubrania",
+    "foldedNoticeOne": "1 rzecz pojawi się tutaj po nowym zdjęciu",
+    "foldedNoticeMany": "{count} rzeczy pojawi się tutaj po nowym zdjęciu",
     "itemsMissing": "Niektóre zapisane ubrania nie są już dostępne",
     "loadError": "Nie udało się wczytać szafy. Przeciągnij, aby spróbować ponownie.",
     "save": "Zapisz strój",

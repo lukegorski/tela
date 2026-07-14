@@ -47,6 +47,7 @@ interface BuilderData {
   items: BuilderItem[];
   draftSlots: Record<string, unknown> | null;
   cutoutsReady: boolean;
+  excludedFolded: number;
 }
 
 type Slot = 'outerwear' | 'top' | 'bottom' | 'shoes';
@@ -515,6 +516,17 @@ export default function BuilderScreen() {
       </div>
 
       <div className="px-4 flex-1 min-h-0 flex flex-col max-w-[430px] w-full mx-auto">
+        {(query.data?.excludedFolded ?? 0) > 0 && (
+          <p
+            data-testid="folded-notice"
+            className="mb-2 self-start px-2.5 py-1 bg-stone-100 dark:bg-neutral-800 text-stone-600 dark:text-stone-400 text-xs rounded-none"
+          >
+            {(query.data!.excludedFolded === 1 ? t.foldedNoticeOne : t.foldedNoticeMany).replace(
+              '{count}',
+              String(query.data!.excludedFolded),
+            )}
+          </p>
+        )}
         {/* canvas: light plate in BOTH themes so dark garments stay visible
             (v0 design-review candidate, spec §9) */}
         <div

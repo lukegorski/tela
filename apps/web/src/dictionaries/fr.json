@@ -326,6 +326,8 @@
     "swipeHint": "Balayez une zone pour explorer · touchez pour garder",
     "emptyWardrobe": "Le créateur a besoin de hauts et de bas. Ajoutez quelques pièces pour commencer.",
     "addItems": "Ajouter des pièces",
+    "foldedNoticeOne": "1 pièce doit être rephotographiée pour apparaître ici",
+    "foldedNoticeMany": "{count} pièces doivent être rephotographiées pour apparaître ici",
     "itemsMissing": "Certaines pièces enregistrées ne sont plus disponibles",
     "loadError": "Impossible de charger votre garde-robe. Balayez pour réessayer.",
     "save": "Enregistrer la tenue",

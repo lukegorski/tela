@@ -326,6 +326,8 @@
     "swipeHint": "Zone wischen zum Stöbern · tippen zum Behalten",
     "emptyWardrobe": "Der Builder braucht Ober- und Unterteile. Füge ein paar Teile hinzu.",
     "addItems": "Teile hinzufügen",
+    "foldedNoticeOne": "1 Teil braucht ein neues Foto, um hier zu erscheinen",
+    "foldedNoticeMany": "{count} Teile brauchen ein neues Foto, um hier zu erscheinen",
     "itemsMissing": "Einige gespeicherte Teile sind nicht mehr verfügbar",
     "loadError": "Kleiderschrank konnte nicht geladen werden. Zum Wiederholen ziehen.",
     "save": "Outfit speichern",

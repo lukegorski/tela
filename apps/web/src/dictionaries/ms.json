@@ -326,6 +326,8 @@
     "swipeHint": "Leret zon untuk melayari · ketik untuk simpan",
     "emptyWardrobe": "Pembina memerlukan atasan dan bawahan. Tambah beberapa pakaian untuk bermula.",
     "addItems": "Tambah pakaian",
+    "foldedNoticeOne": "1 item perlu difoto semula untuk muncul di sini",
+    "foldedNoticeMany": "{count} item perlu difoto semula untuk muncul di sini",
     "itemsMissing": "Sesetengah pakaian yang disimpan tidak lagi tersedia",
     "loadError": "Tidak dapat memuatkan almari anda. Tarik untuk cuba lagi.",
     "save": "Simpan gaya",

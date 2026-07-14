@@ -9,7 +9,6 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import sharp from 'sharp';
-import { removeBackground } from '@imgly/background-removal-node';
 
 // Alpha curve constants — locked by the spike bake-off (report §2).
 export const ALPHA_LO = 70;
@@ -27,14 +26,30 @@ export function applyAlphaCurve(rgba: Buffer, lo: number = ALPHA_LO, hi: number 
   return rgba;
 }
 
-// The lib resolves its ONNX model + resources.json from process.cwd() unless
-// given an explicit publicPath — under the worker the cwd is the app root,
-// not the package, so we must point at the installed dist explicitly.
-const require2 = createRequire(import.meta.url);
-// resolve() returns the package main inside dist/ — its dirname IS the dist
-// dir that holds resources.json + the ONNX weights. ('.../package.json' is
-// blocked by the package's exports map.)
-const IMGLY_DIST_URL = pathToFileURL(dirname(require2.resolve('@imgly/background-removal-node'))).href + '/';
+// The imgly lib must load LAZILY, at first cutout, not at module scope:
+// this module is reachable from the @tela/capabilities barrel, which the
+// admin app bundles with Turbopack — there require.resolve() returns a
+// numeric module id, and dirname(number) threw during admin's build-time
+// page-data collection. Only the worker ever executes a cutout, on plain
+// Node, where resolution works. (sharp stays a static import — it's on
+// Next's default serverExternalPackages list; imgly is not.)
+type ImglyModule = typeof import('@imgly/background-removal-node');
+let imglyPromise: Promise<{ removeBackground: ImglyModule['removeBackground']; distUrl: string }> | null = null;
+
+function loadImgly() {
+  imglyPromise ??= import('@imgly/background-removal-node').then((mod) => {
+    // The lib resolves its ONNX model + resources.json from process.cwd()
+    // unless given an explicit publicPath — under the worker the cwd is the
+    // app root, not the package, so point at the installed dist explicitly.
+    // resolve() returns the package main inside dist/ — its dirname IS the
+    // dist dir that holds resources.json + the ONNX weights.
+    // ('.../package.json' is blocked by the package's exports map.)
+    const require2 = createRequire(import.meta.url);
+    const distUrl = pathToFileURL(dirname(require2.resolve('@imgly/background-removal-node'))).href + '/';
+    return { removeBackground: mod.removeBackground, distUrl };
+  });
+  return imglyPromise;
+}
 
 export interface CutoutTrim {
   x: number;
@@ -81,8 +96,9 @@ export function computeTrim(rgba: Buffer, width: number, height: number): Cutout
  * Enhanced JPEG (garment on white) → WebP-with-alpha cutout.
  */
 export async function cutoutImage(enhancedJpeg: Buffer): Promise<CutoutResult> {
+  const { removeBackground, distUrl } = await loadImgly();
   const blob = await removeBackground(new Blob([new Uint8Array(enhancedJpeg)], { type: 'image/jpeg' }), {
-    publicPath: IMGLY_DIST_URL,
+    publicPath: distUrl,
     output: { format: 'image/png' },
   });
   const png = Buffer.from(await blob.arrayBuffer());

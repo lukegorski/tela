@@ -33,14 +33,15 @@ Luke creates the new **dev** Supabase project (free tier is fine) — or explici
 ## Phase 2 — Relabel production: populate `prd`, swap Railway
 
 1. Populate Doppler `prd` with the CURRENT production values (config-to-config copy inside Doppler — propose the exact `doppler` commands; run them only with Luke's approval; never print values). `prd` must be byte-identical to today's `dev` at swap time so the swap is a pure relabel: **zero behavior change**.
-2. Luke applies (or approves per service) the Railway change: each service's Doppler sync source `dev` → `prd`. One service at a time, verify after each: health endpoint, one real page load, Sentry release tag still flowing.
+2. **Freeze window**: before starting the swap, confirm with Luke that no other build sessions are active and that no pushes to main happen until Phase 3 completes (a mid-swap push redeploys all services at the worst possible moment). State when the freeze lifts.
+3. Luke applies (or approves per service) the Railway change: each service's Doppler sync source `dev` → `prd`. One service at a time, verify after each: health endpoint, one real page load, **one authenticated action** (sign-in or an authed tRPC read — this is what catches an anon-key/URL mismatch in the relabel), Sentry release tag still flowing.
 3. Only when all three services run green from `prd`: Phase 2 is done. Record it in the followups entry immediately (if the session dies here, the system is safe — just relabeled).
 
 ## Phase 3 — Repoint `dev` + stand up the dev project
 
 1. Repoint `dev` config: `SUPABASE_URL`, anon/secret keys, `DATABASE_URL` → the new dev project (Luke-approved `doppler secrets set`; never echoed). All other keys (OpenAI, Fashn, Sentry DSNs) stay shared for now — cost/telemetry separation is out of scope (Sentry `environment` tag already distinguishes).
 2. Stand up dev: `db:migrate` + `manual_*.sql` + drift-report reconciliation; create buckets + policies (script them — this is the reusable artifact; models bucket via the existing script); `prompts:sync`; stylist_rules + annotated_examples seed; pgboss self-creates on first worker boot.
-3. Auth for dev: **email/password + magic link ONLY.** Do NOT touch the Google OAuth client (its verified-branding config stays production-only); dev's allowlist gets localhost entries. Document "Google sign-in is prod-only" as a known dev limitation.
+3. Auth for dev: **email/password + magic link ONLY.** Do NOT touch the Google OAuth client (its verified-branding config stays production-only); dev's allowlist gets localhost entries. Document "Google sign-in is prod-only" as a known dev limitation. Note: the dev project uses Supabase's DEFAULT SMTP (rate-limited to a handful of emails/hour) — fine for dev, do NOT copy prod SMTP credentials; prefer password sign-in for test users to avoid the limit entirely.
 4. Seed data: create 1–2 `@tela.test` users, then the cheapest path to a realistic closet — propose either a mini clone script (Luke's own items: rows + storage objects copied prod→dev, read-only on prod) or seeding via the real upload flow. Cap at ~1 hour; if it wants more, STOP and ask.
 5. Full local smoke against dev: sign-up → upload → enhance + cutout job → builder (flag a test user in) → save outfit → outfits grid. The worker path counts (pg-boss on the dev DB).
 

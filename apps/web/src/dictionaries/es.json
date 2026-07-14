@@ -304,5 +304,35 @@
     "onboardingLocationPrompt": "¿Dónde estás? Adaptaré tus outfits al clima y la temporada local.",
     "onboardingLocationPlaceholder": "Busca tu ciudad...",
     "onboardingSkip": "Estás configurando tu Tela. Saltar por ahora."
+  },
+  "builder": {
+    "title": "Creador",
+    "preparing": "Preparando tus prendas…",
+    "slots": {
+      "outerwear": "Abrigo",
+      "top": "Parte de arriba",
+      "bottom": "Parte de abajo",
+      "shoes": "Zapatos"
+    },
+    "dressHint": "vestidos al final",
+    "none": "ninguno",
+    "browsing": "Explorando",
+    "keep": "Quedarme",
+    "revert": "Volver",
+    "kept": "Guardado",
+    "reverted": "Revertido — tu outfit sigue intacto",
+    "dressOff": "Vestido fuera — de vuelta a las piezas",
+    "coveredByDress": "Cubierto por el vestido — desliza aquí para separar",
+    "swipeHint": "Desliza una zona para explorar · toca para quedarte",
+    "emptyWardrobe": "El creador necesita partes de arriba y de abajo. Añade algunas prendas para empezar.",
+    "addItems": "Añadir prendas",
+    "foldedNoticeOne": "1 prenda necesita una nueva foto para aparecer aquí",
+    "foldedNoticeMany": "{count} prendas necesitan una nueva foto para aparecer aquí",
+    "itemsMissing": "Algunas prendas guardadas ya no están disponibles",
+    "loadError": "No pudimos cargar tu armario. Desliza para reintentar.",
+    "save": "Guardar outfit",
+    "saveInvalid": "Elige arriba + abajo (o un vestido)",
+    "saved": "Guardado en tus outfits",
+    "saveFailed": "No se pudo guardar — inténtalo de nuevo"
   }
 }

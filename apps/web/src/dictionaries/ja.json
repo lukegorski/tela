@@ -304,5 +304,35 @@
     "onboardingLocationPrompt": "どこにお住まいですか？現地の天気と季節に合わせたコーディネートをご提案します。",
     "onboardingLocationPlaceholder": "都市を検索...",
     "onboardingSkip": "Telaのセットアップ中です。今はスキップ。"
+  },
+  "builder": {
+    "title": "ビルダー",
+    "preparing": "アイテムを準備中…",
+    "slots": {
+      "outerwear": "アウター",
+      "top": "トップス",
+      "bottom": "ボトムス",
+      "shoes": "シューズ"
+    },
+    "dressHint": "ワンピースは最後に",
+    "none": "なし",
+    "browsing": "閲覧中",
+    "keep": "決定",
+    "revert": "戻す",
+    "kept": "決定しました",
+    "reverted": "戻しました — コーデはそのまま",
+    "dressOff": "ワンピースを外しました — セパレートに戻ります",
+    "coveredByDress": "ワンピースで隠れています — ここをスワイプでセパレートへ",
+    "swipeHint": "ゾーンをスワイプして閲覧 · タップで決定",
+    "emptyWardrobe": "ビルダーにはトップスとボトムスが必要です。アイテムを追加して始めましょう。",
+    "addItems": "アイテムを追加",
+    "foldedNoticeOne": "1点は撮り直すとここに表示されます",
+    "foldedNoticeMany": "{count}点は撮り直すとここに表示されます",
+    "itemsMissing": "保存済みのアイテムの一部が利用できません",
+    "loadError": "クローゼットを読み込めませんでした。引っ張って再試行。",
+    "save": "コーデを保存",
+    "saveInvalid": "トップス + ボトムス（またはワンピース）を選んでください",
+    "saved": "コーデに保存しました",
+    "saveFailed": "保存できませんでした — もう一度お試しください"
   }
 }

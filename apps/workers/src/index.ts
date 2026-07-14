@@ -13,6 +13,7 @@ import { setObservabilityHooks } from '@tela/capabilities';
 import { getQueue, closeQueue, JOB_NAMES } from '@tela/queue';
 import { closeDb } from '@tela/db';
 import { handleEnhancementJob } from './jobs/enhancement.js';
+import { handleCutoutJob } from './jobs/cutout.js';
 
 // Trigger capability registration
 import '@tela/capabilities';
@@ -58,7 +59,17 @@ async function main() {
     handleEnhancementJob,
   );
 
-  logger.info({ jobs: [JOB_NAMES.ENHANCE_PHOTO] }, 'workers started, waiting for jobs');
+  // Cutout jobs: local model, ~1s each, no external API — cheap to poll.
+  await queue.work(
+    JOB_NAMES.CUTOUT_PHOTO,
+    { batchSize: 1, pollingIntervalSeconds: 5 },
+    handleCutoutJob,
+  );
+
+  logger.info(
+    { jobs: [JOB_NAMES.ENHANCE_PHOTO, JOB_NAMES.CUTOUT_PHOTO] },
+    'workers started, waiting for jobs',
+  );
 }
 
 async function shutdown(signal: string) {

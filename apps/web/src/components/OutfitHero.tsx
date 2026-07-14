@@ -60,7 +60,7 @@ function OutfitHero({ outfit, onTap, onToggleSave, onRequestTryOn, onDelete }: O
         >
           <Image
             src={tryOnImageURL!}
-            alt={`${outfit.occasion} outfit`}
+            alt={outfit.occasion ? `${outfit.occasion} outfit` : 'outfit'}
             fill
             sizes="100vw"
             className="object-cover"
@@ -157,12 +157,14 @@ function OutfitHero({ outfit, onTap, onToggleSave, onRequestTryOn, onDelete }: O
         </div>
       )}
 
-      {/* Occasion category */}
-      <div className="absolute bottom-6 left-5">
-        <span className="text-xs font-medium text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">
-          {dict.constants.occasionOptions[outfit.occasion as keyof typeof dict.constants.occasionOptions] ?? outfit.occasion}
-        </span>
-      </div>
+      {/* Occasion category (absent on manually-built outfits) */}
+      {outfit.occasion && (
+        <div className="absolute bottom-6 left-5">
+          <span className="text-xs font-medium text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">
+            {dict.constants.occasionOptions[outfit.occasion as keyof typeof dict.constants.occasionOptions] ?? outfit.occasion}
+          </span>
+        </div>
+      )}
 
       {/* Save to lookbook button */}
       {onToggleSave && (

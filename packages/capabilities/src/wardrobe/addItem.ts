@@ -23,6 +23,7 @@ const input = z.object({
     material: z.string().nullable().default(null),
     seasonCompatibility: z.array(z.enum(['spring', 'summer', 'fall', 'winter'])).default([]),
     analysisLocale: z.string().default('en'),
+    presentation: z.enum(['flat', 'folded', 'angled']).nullable().default(null),
   }),
 });
 
@@ -85,6 +86,7 @@ export const addItem = registerCapability({
         material: metadata.material,
         seasonCompatibility: metadata.seasonCompatibility,
         analysisLocale: metadata.analysisLocale,
+        presentation: metadata.presentation,
       })
       .returning({ id: closetItems.id });
 

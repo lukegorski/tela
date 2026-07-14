@@ -26,7 +26,7 @@ const itemSummary = z.object({
 
 const outfitSummary = z.object({
   id: z.string().uuid(),
-  rationale: z.string(),
+  rationale: z.string().nullable(),
   saved: z.boolean(),
   createdAt: z.string(),
 });

@@ -4,6 +4,7 @@ import { getDb, itemPhotos } from '@tela/db';
 import { image } from '@tela/ai';
 import { getPrompt } from '@tela/prompts';
 import { logEvent } from '@tela/events';
+import { getQueue, JOB_NAMES } from '@tela/queue';
 import { registerCapability } from '../registry.js';
 import { getRequestContext } from '../context/requestContext.js';
 import { getSupabaseAdmin, ITEM_PHOTOS_BUCKET } from '../storage/supabase.js';
@@ -158,12 +159,18 @@ export const processEnhancement = registerCapability({
         throw new Error(`Failed to upload enhanced photo: ${uploadErr.message}`);
       }
 
-      // Update photo row → complete
+      // Update photo row → complete. A new enhanced image INVALIDATES any
+      // existing cutout (it derives from the enhanced pixels) — null the
+      // path so the cutout job enqueued below regenerates instead of
+      // skipping as 'already_done'. The storage file is overwritten in
+      // place on regeneration (deterministic path, upsert).
       await db
         .update(itemPhotos)
         .set({
           enhancementStatus: 'complete',
           enhancedStoragePath: enhancedPath,
+          cutoutStoragePath: null,
+          cutoutTrim: null,
           backgroundColor: bg.median,
           enhancedAt: new Date(),
           enhancementError: null,
@@ -189,6 +196,27 @@ export const processEnhancement = registerCapability({
           type: 'enhancement.retry',
           source,
           payload: { photoId, edgeRatios: cropCheck.edgeRatios },
+        });
+      }
+
+      // Builder v0 (§8a whitelist item c): enqueue the transparent-cutout
+      // step for the freshly-enhanced photo. FAIL-OPEN and additive — a
+      // cutout enqueue failure must NEVER affect the enhancement result.
+      try {
+        const queue = await getQueue();
+        await queue.send(JOB_NAMES.CUTOUT_PHOTO, { photoId, userId });
+      } catch (cutoutErr) {
+        await logEvent({
+          userId,
+          type: 'enhancement.cutout_failed',
+          source,
+          payload: {
+            photoId,
+            stage: 'enqueue',
+            error: (cutoutErr instanceof Error ? cutoutErr.message : String(cutoutErr)).slice(0, 200),
+          },
+        }).catch(() => {
+          /* even event logging must not break enhancement */
         });
       }
 

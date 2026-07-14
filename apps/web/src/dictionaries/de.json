@@ -304,5 +304,35 @@
     "onboardingLocationPrompt": "Wo bist du? Ich stimme deine Outfits auf dein lokales Wetter und die Jahreszeit ab.",
     "onboardingLocationPlaceholder": "Suche nach deiner Stadt...",
     "onboardingSkip": "Du richtest dein Tela ein. Erstmal überspringen."
+  },
+  "builder": {
+    "title": "Builder",
+    "preparing": "Deine Teile werden vorbereitet…",
+    "slots": {
+      "outerwear": "Jacke",
+      "top": "Oberteil",
+      "bottom": "Unterteil",
+      "shoes": "Schuhe"
+    },
+    "dressHint": "Kleider am Ende",
+    "none": "keins",
+    "browsing": "Stöbern",
+    "keep": "Behalten",
+    "revert": "Zurück",
+    "kept": "Behalten",
+    "reverted": "Zurückgesetzt — dein Outfit bleibt unverändert",
+    "dressOff": "Kleid entfernt — zurück zu den Teilen",
+    "coveredByDress": "Vom Kleid verdeckt — hier wischen für Teile",
+    "swipeHint": "Zone wischen zum Stöbern · tippen zum Behalten",
+    "emptyWardrobe": "Der Builder braucht Ober- und Unterteile. Füge ein paar Teile hinzu.",
+    "addItems": "Teile hinzufügen",
+    "foldedNoticeOne": "1 Teil braucht ein neues Foto, um hier zu erscheinen",
+    "foldedNoticeMany": "{count} Teile brauchen ein neues Foto, um hier zu erscheinen",
+    "itemsMissing": "Einige gespeicherte Teile sind nicht mehr verfügbar",
+    "loadError": "Kleiderschrank konnte nicht geladen werden. Zum Wiederholen ziehen.",
+    "save": "Outfit speichern",
+    "saveInvalid": "Wähle Oberteil + Unterteil (oder ein Kleid)",
+    "saved": "In deinen Outfits gespeichert",
+    "saveFailed": "Speichern fehlgeschlagen — bitte erneut versuchen"
   }
 }

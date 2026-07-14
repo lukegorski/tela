@@ -304,5 +304,35 @@
     "onboardingLocationPrompt": "Gdzie jesteś? Dostosuję Twoje stylizacje do lokalnej pogody i pory roku.",
     "onboardingLocationPlaceholder": "Szukaj swojego miasta...",
     "onboardingSkip": "Konfigurujesz swoje Tela. Pomiń na razie."
+  },
+  "builder": {
+    "title": "Kreator",
+    "preparing": "Przygotowujemy Twoje ubrania…",
+    "slots": {
+      "outerwear": "Okrycie",
+      "top": "Góra",
+      "bottom": "Dół",
+      "shoes": "Buty"
+    },
+    "dressHint": "sukienki na końcu",
+    "none": "brak",
+    "browsing": "Przeglądanie",
+    "keep": "Zostaw",
+    "revert": "Cofnij",
+    "kept": "Zostawiono",
+    "reverted": "Cofnięto — strój bez zmian",
+    "dressOff": "Sukienka zdjęta — powrót do części",
+    "coveredByDress": "Zakryte sukienką — przesuń tutaj, aby wrócić do części",
+    "swipeHint": "Przesuń strefę, aby przeglądać · dotknij, aby zostawić",
+    "emptyWardrobe": "Kreator potrzebuje góry i dołu. Dodaj kilka ubrań, aby zacząć.",
+    "addItems": "Dodaj ubrania",
+    "foldedNoticeOne": "1 rzecz pojawi się tutaj po nowym zdjęciu",
+    "foldedNoticeMany": "{count} rzeczy pojawi się tutaj po nowym zdjęciu",
+    "itemsMissing": "Niektóre zapisane ubrania nie są już dostępne",
+    "loadError": "Nie udało się wczytać szafy. Przeciągnij, aby spróbować ponownie.",
+    "save": "Zapisz strój",
+    "saveInvalid": "Wybierz górę + dół (lub sukienkę)",
+    "saved": "Zapisano w Twoich strojach",
+    "saveFailed": "Nie udało się zapisać — spróbuj ponownie"
   }
 }

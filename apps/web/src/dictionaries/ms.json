@@ -304,5 +304,35 @@
     "onboardingLocationPrompt": "Di mana anda berada? Saya akan sesuaikan pakaian anda mengikut cuaca dan musim setempat.",
     "onboardingLocationPlaceholder": "Cari bandar anda...",
     "onboardingSkip": "Anda sedang menyediakan Tela anda. Langkau buat masa ini."
+  },
+  "builder": {
+    "title": "Pembina",
+    "preparing": "Menyediakan pakaian anda…",
+    "slots": {
+      "outerwear": "Jaket",
+      "top": "Atasan",
+      "bottom": "Bawahan",
+      "shoes": "Kasut"
+    },
+    "dressHint": "gaun di hujung",
+    "none": "tiada",
+    "browsing": "Melayari",
+    "keep": "Simpan",
+    "revert": "Kembali",
+    "kept": "Disimpan",
+    "reverted": "Dikembalikan — gaya anda tidak berubah",
+    "dressOff": "Gaun ditanggalkan — kembali ke pakaian berasingan",
+    "coveredByDress": "Dilitupi gaun — leret di sini untuk pakaian berasingan",
+    "swipeHint": "Leret zon untuk melayari · ketik untuk simpan",
+    "emptyWardrobe": "Pembina memerlukan atasan dan bawahan. Tambah beberapa pakaian untuk bermula.",
+    "addItems": "Tambah pakaian",
+    "foldedNoticeOne": "1 item perlu difoto semula untuk muncul di sini",
+    "foldedNoticeMany": "{count} item perlu difoto semula untuk muncul di sini",
+    "itemsMissing": "Sesetengah pakaian yang disimpan tidak lagi tersedia",
+    "loadError": "Tidak dapat memuatkan almari anda. Tarik untuk cuba lagi.",
+    "save": "Simpan gaya",
+    "saveInvalid": "Pilih atasan + bawahan (atau gaun)",
+    "saved": "Disimpan dalam gaya anda",
+    "saveFailed": "Tidak dapat menyimpan — cuba lagi"
   }
 }

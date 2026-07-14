@@ -12,6 +12,7 @@ type WardrobeEvent =
   | 'wardrobe.item_worn'
   | 'wardrobe.item_viewed' // selective
   | 'wardrobe.closet_viewed' // selective
+  | 'wardrobe.add_prompted_from_builder' // empty builder slot nudged the user into upload (spec §7)
   | 'wardrobe.photo_uploaded';
 
 // Profile domain
@@ -31,6 +32,10 @@ type OutfitEvent =
   | 'outfit.unsaved' // saved → false; row still exists (vs outfit.deleted = row destroyed)
   | 'outfit.deleted'
   | 'outfit.role_duplicate_dropped' // AI emitted duplicate role; insertion dedup dropped extras pre-insert
+  | 'outfit.role_corrected' // AI role contradicted closet category; category won at insert (P3 root-cause fix)
+  | 'outfit.builder_opened' // builder canvas mounted (restored_draft, cutouts_ready)
+  | 'outfit.builder_session_ended' // client-reported; cross-check vs draft-save deltas (spec §7 reliability rule)
+  | 'outfit.manual_saved' // builder v0 save (composition, had_shoes, dress_mode)
   | 'outfit.worn_confirmed'
   | 'outfit.worn_inferred';
 
@@ -70,7 +75,9 @@ type EnhancementEvent =
   | 'enhancement.started'
   | 'enhancement.completed'
   | 'enhancement.retry'
-  | 'enhancement.failed';
+  | 'enhancement.failed'
+  | 'enhancement.cutout_completed' // transparent WebP cutout written (builder v0)
+  | 'enhancement.cutout_failed'; // cutout error — never affects enhancement itself (fail-open)
 
 // Try-on domain
 type TryOnEvent =

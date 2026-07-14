@@ -45,6 +45,23 @@ export const itemPhotos = pgTable('item_photos', {
   enhancementError: varchar('enhancement_error', { length: 500 }),
   enhancementAttempts: integer('enhancement_attempts').notNull().default(0),
   enhancedStoragePath: varchar('enhanced_storage_path', { length: 1024 }),
+  /**
+   * Transparent cutout (WebP-with-alpha) derived from the enhanced photo by
+   * enhancement.cutout (spec §4: local background removal + alpha curve).
+   * Convention: `${storagePath}.cutout.webp`. Null until generated; the
+   * builder falls back to the enhanced JPEG while pending.
+   */
+  cutoutStoragePath: varchar('cutout_storage_path', { length: 1024 }),
+  /**
+   * Opaque-pixel bounding box of the cutout (alpha > 16), computed once at
+   * cutout generation: { x, y, w, h, imgW, imgH }. The builder recipe
+   * places garments by this box (spec §3 recipe v2) — precomputed so
+   * phones never scan 50 full-res images client-side. Invalidated with the
+   * cutout on re-enhancement.
+   */
+  cutoutTrim: jsonb('cutout_trim').$type<{
+    x: number; y: number; w: number; h: number; imgW: number; imgH: number;
+  }>(),
   /** Detected background color from the enhanced image, e.g. "#f5f5f5" — for UI cards */
   backgroundColor: varchar('background_color', { length: 7 }),
   enhancedAt: timestamp('enhanced_at', { withTimezone: true }),
@@ -67,6 +84,13 @@ export const closetItems = pgTable(
     enhancedPhotoId: uuid('enhanced_photo_id').references(() => itemPhotos.id),
     backgroundColor: varchar('background_color', { length: 7 }),
     analysisLocale: varchar('analysis_locale', { length: 10 }).notNull().default('en'),
+    /**
+     * How the garment is presented in its photo, classified by item.analyze
+     * (spec §2a #12): 'flat' (worn shape visible — product-style/hanger ok),
+     * 'folded' (folded/stacked/crumpled — excluded from the outfit builder
+     * until retaken), 'angled' (skewed shot). NULL = not yet classified.
+     */
+    presentation: varchar('presentation', { length: 10 }),
 
     // Classification
     category: varchar('category', { length: 100 }).notNull(),

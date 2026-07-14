@@ -304,5 +304,35 @@
     "onboardingLocationPrompt": "Onde você está? Vou adaptar seus looks ao clima e à estação local.",
     "onboardingLocationPlaceholder": "Pesquise sua cidade...",
     "onboardingSkip": "Você está configurando seu Tela. Pular por enquanto."
+  },
+  "builder": {
+    "title": "Criador",
+    "preparing": "Preparando suas peças…",
+    "slots": {
+      "outerwear": "Casaco",
+      "top": "Parte de cima",
+      "bottom": "Parte de baixo",
+      "shoes": "Sapatos"
+    },
+    "dressHint": "vestidos no final",
+    "none": "nenhum",
+    "browsing": "Explorando",
+    "keep": "Manter",
+    "revert": "Voltar",
+    "kept": "Mantido",
+    "reverted": "Revertido — seu look continua intacto",
+    "dressOff": "Vestido removido — de volta às peças",
+    "coveredByDress": "Coberto pelo vestido — deslize aqui para separar",
+    "swipeHint": "Deslize uma zona para explorar · toque para manter",
+    "emptyWardrobe": "O criador precisa de partes de cima e de baixo. Adicione algumas peças para começar.",
+    "addItems": "Adicionar peças",
+    "foldedNoticeOne": "1 peça precisa de uma nova foto para aparecer aqui",
+    "foldedNoticeMany": "{count} peças precisam de uma nova foto para aparecer aqui",
+    "itemsMissing": "Algumas peças salvas não estão mais disponíveis",
+    "loadError": "Não foi possível carregar seu guarda-roupa. Deslize para tentar de novo.",
+    "save": "Salvar look",
+    "saveInvalid": "Escolha cima + baixo (ou um vestido)",
+    "saved": "Salvo nos seus looks",
+    "saveFailed": "Não foi possível salvar — tente novamente"
   }
 }

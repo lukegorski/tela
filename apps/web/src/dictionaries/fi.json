@@ -304,5 +304,35 @@
     "onboardingLocationPrompt": "Missä olet? Räätälöin asusi paikallisen sään ja vuodenajan mukaan.",
     "onboardingLocationPlaceholder": "Hae kaupunkiasi...",
     "onboardingSkip": "Olet ottamassa Telaa käyttöön. Ohita toistaiseksi."
+  },
+  "builder": {
+    "title": "Rakentaja",
+    "preparing": "Valmistellaan vaatteitasi…",
+    "slots": {
+      "outerwear": "Päällystakki",
+      "top": "Yläosa",
+      "bottom": "Alaosa",
+      "shoes": "Kengät"
+    },
+    "dressHint": "mekot lopussa",
+    "none": "ei mitään",
+    "browsing": "Selaat",
+    "keep": "Pidä",
+    "revert": "Palauta",
+    "kept": "Pidetty",
+    "reverted": "Palautettu — asusi on ennallaan",
+    "dressOff": "Mekko pois — takaisin osiin",
+    "coveredByDress": "Mekon peitossa — pyyhkäise tästä osiin",
+    "swipeHint": "Pyyhkäise aluetta selataksesi · napauta pitääksesi",
+    "emptyWardrobe": "Rakentaja tarvitsee ylä- ja alaosia. Lisää muutama vaate aloittaaksesi.",
+    "addItems": "Lisää vaatteita",
+    "foldedNoticeOne": "1 vaate tarvitsee uuden kuvan näkyäkseen täällä",
+    "foldedNoticeMany": "{count} vaatetta tarvitsee uuden kuvan näkyäkseen täällä",
+    "itemsMissing": "Osa tallennetuista vaatteista ei ole enää saatavilla",
+    "loadError": "Vaatekaappia ei voitu ladata. Vedä yrittääksesi uudelleen.",
+    "save": "Tallenna asu",
+    "saveInvalid": "Valitse yläosa + alaosa (tai mekko)",
+    "saved": "Tallennettu asuihisi",
+    "saveFailed": "Tallennus epäonnistui — yritä uudelleen"
   }
 }

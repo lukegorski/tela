@@ -165,7 +165,7 @@ function OutfitsPageContent() {
   // English so we just lowercase-compare directly.
   const availableOccasions = useMemo(() => {
     if (loading) return OCCASION_OPTIONS;
-    const occs = new Set(outfits.map((o) => o.occasion.toLowerCase()));
+    const occs = new Set(outfits.map((o) => o.occasion?.toLowerCase()));
     return OCCASION_OPTIONS.filter((opt) => occs.has(opt.toLowerCase()));
   }, [outfits, loading]);
 
@@ -179,7 +179,7 @@ function OutfitsPageContent() {
   // Filter outfits for hero feed display
   const heroOutfits = useMemo(() => outfits.filter((o) => {
     const matchesOccasion =
-      !occasion || o.occasion.toLowerCase() === occasion.toLowerCase();
+      !occasion || o.occasion?.toLowerCase() === occasion.toLowerCase();
     const matchesColor =
       colorFilters.length === 0 ||
       o.items.some((item) => {

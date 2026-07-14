@@ -8,7 +8,7 @@ export {
 } from './users.js';
 export { closets, itemPhotos, closetItems } from './wardrobe.js';
 export { styleProfiles, styleProfileVersions } from './profiles.js';
-export { contexts, generations, outfits, outfitItems } from './outfits.js';
+export { contexts, generations, outfits, outfitItems, outfitDrafts } from './outfits.js';
 export { events } from './events.js';
 export { prompts, promptVersions } from './prompts.js';
 export { annotatedExamples, stylistRules, wardrobeGaps } from './knowledge.js';

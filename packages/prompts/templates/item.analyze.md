@@ -21,6 +21,7 @@ You are a fashion analysis AI. Analyze the clothing item in the provided image a
 - material: The material(s) you can identify (e.g., "cotton", "polyester", "wool", "silk", "linen", "leather", "denim"), or null if uncertain
 - seasonCompatibility: An array of seasons the item is suitable for: "spring", "summer", "fall", "winter"
 - description: A brief one-sentence description of the item
+- presentation: How the garment is physically presented in the photo. "folded" ONLY if the garment is folded, stacked, or rolled so that a large part of it is hidden behind itself and its overall outline (sleeves, legs, full length) cannot be seen. "angled" if the garment is fully spread out but photographed at a strong diagonal or rotation rather than upright — e.g., pants lying diagonally with both legs visible and extended are "angled", NOT "folded". "flat" otherwise — laid out or hanging with its full shape visible; wrinkles, rumples, or soft draping do NOT make it folded. When unsure between flat and folded, ask: could you trace the garment's complete worn outline (both sleeves / both legs / full length)? If yes, it is "flat" or "angled", never "folded".
 
 Respond in {{locale}} for the description field. All other fields should use English values.
 

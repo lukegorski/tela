@@ -82,9 +82,13 @@ export default function OutfitCard({
       {/* Details */}
       <div className="p-4">
         <div className="flex items-start justify-between gap-3 mb-3">
-          <span className="px-2.5 py-1 bg-stone-100 dark:bg-neutral-800 text-stone-600 dark:text-stone-400 text-xs rounded-none capitalize">
-            {dict.constants.occasionOptions[outfit.occasion as keyof typeof dict.constants.occasionOptions] ?? outfit.occasion}
-          </span>
+          {outfit.occasion ? (
+            <span className="px-2.5 py-1 bg-stone-100 dark:bg-neutral-800 text-stone-600 dark:text-stone-400 text-xs rounded-none capitalize">
+              {dict.constants.occasionOptions[outfit.occasion as keyof typeof dict.constants.occasionOptions] ?? outfit.occasion}
+            </span>
+          ) : (
+            <span />
+          )}
           <div className={`flex items-center gap-1${confirming ? " relative z-20" : ""}`}>
             {confirming ? (
               <>

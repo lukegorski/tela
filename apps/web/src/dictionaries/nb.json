@@ -304,5 +304,35 @@
     "onboardingLocationPrompt": "Hvor er du? Jeg tilpasser antrekkene dine etter lokalt vær og sesong.",
     "onboardingLocationPlaceholder": "Søk etter byen din...",
     "onboardingSkip": "Du setter opp din Tela. Hopp over for nå."
+  },
+  "builder": {
+    "title": "Byggeren",
+    "preparing": "Forbereder plaggene dine…",
+    "slots": {
+      "outerwear": "Yttertøy",
+      "top": "Overdel",
+      "bottom": "Underdel",
+      "shoes": "Sko"
+    },
+    "dressHint": "kjoler til slutt",
+    "none": "ingen",
+    "browsing": "Blar",
+    "keep": "Behold",
+    "revert": "Angre",
+    "kept": "Beholdt",
+    "reverted": "Angret — antrekket er urørt",
+    "dressOff": "Kjole av — tilbake til delene",
+    "coveredByDress": "Dekket av kjolen — sveip her for deler",
+    "swipeHint": "Sveip en sone for å bla · trykk for å beholde",
+    "emptyWardrobe": "Byggeren trenger over- og underdeler. Legg til noen plagg for å starte.",
+    "addItems": "Legg til plagg",
+    "foldedNoticeOne": "1 plagg trenger et nytt bilde for å vises her",
+    "foldedNoticeMany": "{count} plagg trenger nye bilder for å vises her",
+    "itemsMissing": "Noen lagrede plagg er ikke lenger tilgjengelige",
+    "loadError": "Kunne ikke laste garderoben din. Dra for å prøve igjen.",
+    "save": "Lagre antrekk",
+    "saveInvalid": "Velg overdel + underdel (eller en kjole)",
+    "saved": "Lagret i antrekkene dine",
+    "saveFailed": "Kunne ikke lagre — prøv igjen"
   }
 }

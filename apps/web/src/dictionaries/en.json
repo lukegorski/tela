@@ -304,5 +304,35 @@
     "onboardingLocationPrompt": "Where are you based? I'll tailor your outfits to your local weather and season.",
     "onboardingLocationPlaceholder": "Search for your city...",
     "onboardingSkip": "You are setting up your Tela. Skip for now."
+  },
+  "builder": {
+    "title": "Builder",
+    "preparing": "Preparing your pieces…",
+    "slots": {
+      "outerwear": "Outerwear",
+      "top": "Top",
+      "bottom": "Bottom",
+      "shoes": "Shoes"
+    },
+    "dressHint": "dresses at the end",
+    "none": "none",
+    "browsing": "Browsing",
+    "keep": "Keep",
+    "revert": "Revert",
+    "kept": "Kept",
+    "reverted": "Reverted — outfit untouched",
+    "dressOff": "Dress off — back to separates",
+    "coveredByDress": "Covered by dress — swipe here for separates",
+    "swipeHint": "Swipe a zone to browse · tap to keep",
+    "emptyWardrobe": "Your builder needs tops and bottoms. Add a few pieces to start styling.",
+    "addItems": "Add items",
+    "foldedNoticeOne": "1 piece needs a retake to appear here",
+    "foldedNoticeMany": "{count} pieces need a retake to appear here",
+    "itemsMissing": "Some saved items are no longer available",
+    "loadError": "Couldn't load your wardrobe. Pull to retry.",
+    "save": "Save outfit",
+    "saveInvalid": "Pick a top + bottom (or a dress)",
+    "saved": "Saved to your outfits",
+    "saveFailed": "Couldn't save — try again"
   }
 }

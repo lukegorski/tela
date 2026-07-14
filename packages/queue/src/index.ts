@@ -52,12 +52,20 @@ export async function closeQueue(): Promise<void> {
 export const JOB_NAMES = {
   ENHANCE_PHOTO: 'enhancement.process',
   PROCESS_TRY_ON: 'tryon.process',
+  CUTOUT_PHOTO: 'enhancement.cutout',
 } as const;
 
 export interface EnhancePhotoJob {
   /** The photoId from item_photos to enhance */
   photoId: string;
   /** The userId — used for authorization, rate limit accounting, and event attribution */
+  userId: string;
+}
+
+export interface CutoutPhotoJob {
+  /** The photoId from item_photos whose ENHANCED image gets a transparent cutout */
+  photoId: string;
+  /** The owning user — event attribution */
   userId: string;
 }
 

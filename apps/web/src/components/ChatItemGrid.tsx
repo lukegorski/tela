@@ -47,7 +47,9 @@ export default function ChatItemGrid({ items, onTap }: ChatItemGridProps) {
                     src={item.imageUrl}
                     alt={`${item.subcategory ?? item.category} - ${item.primaryColor}`}
                     fill
-                    sizes="(max-width: 768px) 40vw, 25vw"
+                    // 2-col grid inside the chat message column
+                    // (max-w-[80%] of the thread at any viewport) → ~40vw.
+                    sizes="40vw"
                     className="object-contain"
                   />
                 )}

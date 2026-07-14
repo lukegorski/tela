@@ -515,7 +515,7 @@ export default function WardrobePage() {
         ) : groupedItems.length > 0 ? (
           <div ref={scrollContainerRef} className="flex-1 overflow-y-auto min-h-0">
             <div className="flex flex-col gap-px bg-neutral-200 dark:bg-neutral-700">
-              {groupedItems.map(({ category, items: catItems }) => (
+              {groupedItems.map(({ category, items: catItems }, groupIndex) => (
                 <div
                   key={category}
                   className={`overflow-x-auto scrollbar-hide overscroll-x-contain snap-x bg-white dark:bg-neutral-900 ${
@@ -523,7 +523,7 @@ export default function WardrobePage() {
                   }`}
                 >
                   <div className="flex gap-px bg-neutral-200 dark:bg-neutral-700" style={{ width: "max-content" }}>
-                    {catItems.map((item) => (
+                    {catItems.map((item, itemIndex) => (
                       <div
                         key={item.id}
                         className={`bg-white shrink-0 snap-start ${
@@ -544,6 +544,7 @@ export default function WardrobePage() {
                                 ? "(min-width: 1024px) 20vw, 33vw"
                                 : "(min-width: 1024px) 20vw, 50vw"
                           }
+                          preload={groupIndex === 0 && itemIndex === 0}
                           onTap={(itm, dims) => { setSelectedItem(itm); setSelectedDimensions(dims); }}
                           onDelete={() => deleteItem(item)}
                         />

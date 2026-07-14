@@ -56,7 +56,7 @@ function OutfitHero({ outfit, onTap, onToggleSave, onRequestTryOn, onDelete }: O
         /* Try-on hero image */
         <button
           onClick={onTap}
-          className="w-full h-full block"
+          className="relative w-full h-full block"
         >
           <Image
             src={tryOnImageURL!}
@@ -64,7 +64,7 @@ function OutfitHero({ outfit, onTap, onToggleSave, onRequestTryOn, onDelete }: O
             fill
             sizes="100vw"
             className="object-cover"
-            priority
+            preload
             onError={() => setTryOnBroken(true)}
           />
         </button>

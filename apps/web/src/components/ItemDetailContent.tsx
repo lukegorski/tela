@@ -60,7 +60,11 @@ export function ItemDetailContent({
             src={item.imageUrl}
             alt={item.description ?? ""}
             fill
-            sizes="100vw"
+            // BottomSheet is full-width on mobile but a 420px side panel
+            // from Tailwind sm (640px) up — claiming 100vw there trips
+            // Next's "not rendered at full viewport width" warning and
+            // over-fetches ~4x.
+            sizes="(max-width: 640px) 100vw, 420px"
             className="object-contain"
             onLoad={!dimensions ? (e) => {
               const img = e.target as HTMLImageElement;

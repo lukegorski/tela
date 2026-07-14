@@ -107,7 +107,9 @@ export default function ChatWardrobePicker({
                       src={item.imageUrl}
                       alt={item.description ?? item.subcategory ?? item.category}
                       fill
-                      sizes="(max-width: 768px) 33vw, 20vw"
+                      // Third of the BottomSheet: 33vw mobile, 140px in
+                      // the desktop 420px side panel.
+                      sizes="(max-width: 640px) 33vw, 140px"
                       className="object-contain"
                     />
                   )}

@@ -4,7 +4,14 @@ import { getDb, closetItems, itemPhotos } from '@tela/db';
 import { getSupabaseAdmin, ITEM_PHOTOS_BUCKET } from '../storage/supabase.js';
 import { getOrSignUrl } from '../storage/signedUrlCache.js';
 
-const SIGNED_URL_TTL_SECONDS = 600;
+// 1h, not 10min: these URLs sit in browser caches (React Query gcTime,
+// stale-while-revalidate renders, bfcache) well past the response that
+// carried them. Next's image optimizer refetches the URL upstream on
+// every uncached variant request and relays Supabase's InvalidJWT 400
+// when the token has expired — the "signed-URL 400s" console noise.
+// The TTL must comfortably outlive the client cache horizon, not just
+// the immediate render. Keep in sync with outfitShape.ts.
+const SIGNED_URL_TTL_SECONDS = 3600;
 
 /**
  * The rich shape returned by `wardrobe.listItems` and `wardrobe.getItem`.

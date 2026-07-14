@@ -334,10 +334,11 @@ function OutfitsPageContent() {
                           <LoadingSpinner />
                         </div>
                       )}
-                      {heroOutfits.map((outfit) => (
+                      {heroOutfits.map((outfit, i) => (
                         <div key={outfit.id} className="bg-white aspect-[3/4] relative">
                           <OutfitGridCell
                             outfit={outfit}
+                            preload={i === 0}
                             hideOccasion={gridMode === 3}
                             onTap={() => switchToHeroAndSelect(outfit)}
                             onRequestTryOn={() => { void triggerTryOn(outfit.id, true); }}
@@ -375,10 +376,11 @@ function OutfitsPageContent() {
                   <LoadingSpinner />
                 </div>
               )}
-              {heroOutfits.map((outfit) => (
+              {heroOutfits.map((outfit, i) => (
                 <div key={outfit.id} className="bg-white h-[calc(100vh-10rem)]">
                   <OutfitGridCell
                     outfit={outfit}
+                    preload={i === 0}
                     onTap={() => setSelectedOutfit(outfit)}
                     onRequestTryOn={() => { void triggerTryOn(outfit.id, true); }}
                     onDelete={() => { void removeOutfit(outfit.id); }}

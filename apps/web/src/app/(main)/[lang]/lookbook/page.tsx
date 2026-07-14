@@ -240,10 +240,11 @@ export default function LookbookPage() {
                   ) : (
                     <div className="relative min-h-full">
                       <div className={`grid ${gridMode === 2 ? "grid-cols-2" : "grid-cols-3"} gap-px bg-neutral-200 dark:bg-neutral-700`}>
-                        {filteredOutfits.map((outfit) => (
+                        {filteredOutfits.map((outfit, i) => (
                           <div key={outfit.id} className="bg-white aspect-[3/4] relative">
                             <OutfitGridCell
                               outfit={outfit}
+                              preload={i === 0}
                               hideOccasion={gridMode === 3}
                               onTap={() => switchToHeroAndSelect(outfit)}
                               onDelete={() => {
@@ -267,10 +268,11 @@ export default function LookbookPage() {
             {/* Desktop: fixed grid */}
             <div className="hidden sm:block flex-1 relative">
               <div className="grid grid-cols-5 gap-px bg-neutral-200 dark:bg-neutral-700">
-                {filteredOutfits.map((outfit) => (
+                {filteredOutfits.map((outfit, i) => (
                   <div key={outfit.id} className="bg-white h-[calc(100vh-10rem)]">
                     <OutfitGridCell
                       outfit={outfit}
+                      preload={i === 0}
                       onTap={() => setSelectedOutfit(outfit)}
                       onDelete={() => {
                         removeOutfit(outfit.id).catch((err) =>

@@ -1,6 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-const SAFETY_MARGIN_MS = 2 * 60 * 1000;
+// A cached URL is only reused while it still has at least this much
+// validity left. The margin must cover the CLIENT-side cache horizon,
+// not just in-flight latency: the browser holds tRPC responses (React
+// Query gcTime ~5min) and re-renders stale data on remount, and Next's
+// image optimizer refetches the URL upstream at that point. A URL
+// handed out with <5min left produces optimizer 400s (Supabase
+// InvalidJWT) on those stale renders. 10min = gcTime + staleTime +
+// generous slack; with a 1h TTL that still reuses each signature for
+// ~50 minutes.
+const SAFETY_MARGIN_MS = 10 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 5000;
 
 interface CacheEntry {
@@ -13,15 +22,13 @@ interface CacheEntry {
  * Process-local LRU-ish cache for Supabase Storage signed URLs. Restart-
  * on-deploy clears it — no Redis, no persistence. Map preserves
  * insertion order, so the oldest entry is the head of `.keys()`; we
- * evict it when we hit MAX_CACHE_ENTRIES. The 2-minute safety margin
- * ensures we never hand back a URL that's seconds from expiry.
+ * evict it when we hit MAX_CACHE_ENTRIES. The safety margin ensures we
+ * never hand back a URL that's close to expiry (see SAFETY_MARGIN_MS).
  *
  * Cache key is `${bucket}:${path}` so the same path in two buckets
  * doesn't collide. TTL is tracked per-entry via expiresAt so callers
- * with different TTLs (outfit.list at 600s vs tryon.getStatus at 3600s)
- * can share — the cached URL is whatever was signed last; any remaining
- * validity past the safety margin is good enough since the browser
- * fetches the image immediately.
+ * with different TTLs can share — the cached URL is whatever was signed
+ * last; any remaining validity past the safety margin is good enough.
  */
 const cache = new Map<string, CacheEntry>();
 

@@ -25,6 +25,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { useAuthContext } from "@/components/AuthProvider";
 import { useDictionary } from "@/components/DictionaryProvider";
 import { localePath } from "@/lib/i18n";
@@ -94,7 +95,7 @@ function ImageCarousel({ className, onReady }: { className?: string; onReady?: (
                 fill
                 sizes="(min-width: 768px) 60vw, 100vw"
                 className="object-cover"
-                priority={i === activeIndex}
+                preload={i === activeIndex}
                 loading="eager"
                 onLoad={() => { if (i === activeIndex) onReady?.(); }}
               />
@@ -442,9 +443,9 @@ function LegalConsent({
   return (
     <p className={className}>
       By continuing, you agree to Tela&rsquo;s{' '}
-      <a href="/terms" className={linkClassName}>Terms</a>
+      <Link href="/terms" className={linkClassName}>Terms</Link>
       {' '}and acknowledge our{' '}
-      <a href="/privacy" className={linkClassName}>Privacy Policy</a>.
+      <Link href="/privacy" className={linkClassName}>Privacy Policy</Link>.
     </p>
   );
 }

@@ -21,6 +21,9 @@ interface WardrobeItemCardProps {
   onDelete?: () => void;
   hideMetadata?: boolean;
   sizes?: string;
+  /** Set on the first (above-the-fold) card so its image — the page's
+   *  likely LCP — gets a preload link instead of lazy loading. */
+  preload?: boolean;
 }
 
 const STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
@@ -34,6 +37,7 @@ export default function WardrobeItemCard({
   onDelete,
   hideMetadata,
   sizes,
+  preload,
 }: WardrobeItemCardProps) {
   const { dict, lang, translating } = useDictionary();
   const [dims, setDims] = useState<ImageDimensions | null>(null);
@@ -94,6 +98,7 @@ export default function WardrobeItemCard({
             alt={item.description ?? ""}
             fill
             sizes={sizes || "(max-width: 768px) 50vw, 33vw"}
+            preload={preload}
             className="object-contain"
             onLoad={(e) => {
               const img = e.target as HTMLImageElement;

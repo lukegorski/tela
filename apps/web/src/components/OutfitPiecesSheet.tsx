@@ -138,7 +138,11 @@ export default function OutfitPiecesSheet({
           {/* Outfit name */}
           {(outfit.name || outfit.occasion) && (
             <h4 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 uppercase tracking-widest">
-              {tr?.name || outfit.name || (dict.constants.occasionOptions[outfit.occasion as keyof typeof dict.constants.occasionOptions] ?? outfit.occasion)}
+              {tr?.name ||
+                outfit.name ||
+                (outfit.occasion &&
+                  (dict.constants.occasionOptions[outfit.occasion as keyof typeof dict.constants.occasionOptions] ??
+                    outfit.occasion))}
             </h4>
           )}
         </div>

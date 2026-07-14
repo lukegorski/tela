@@ -120,8 +120,8 @@ export interface Outfit {
   name: string | null;
   wardrobeAssessment: string | null;
   pairingKey: string;
-  occasion: string;
-  season: string;
+  occasion: string | null;
+  season: string | null;
   saved: boolean;
   savedAt: string | null;
   feedback: 'up' | 'down' | null;

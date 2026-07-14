@@ -56,7 +56,7 @@ function OutfitGridCell({ outfit, onTap, onRequestTryOn, onDelete, hideOccasion 
       {hasTryOnImage ? (
         <Image
           src={tryOnImageURL!}
-          alt={`${outfit.occasion} outfit`}
+          alt={outfit.occasion ? `${outfit.occasion} outfit` : 'outfit'}
           fill
           sizes="(max-width: 768px) 50vw, 33vw"
           className="object-cover"
@@ -143,8 +143,8 @@ function OutfitGridCell({ outfit, onTap, onRequestTryOn, onDelete, hideOccasion 
         </div>
       )}
 
-      {/* Occasion category */}
-      {!hideOccasion && (
+      {/* Occasion category (absent on manually-built outfits) */}
+      {!hideOccasion && outfit.occasion && (
         <span className="absolute bottom-2 left-2.5 text-[10px] font-medium text-neutral-400 dark:text-neutral-500 uppercase tracking-wide">
           {dict.constants.occasionOptions[outfit.occasion as keyof typeof dict.constants.occasionOptions] ?? outfit.occasion}
         </span>

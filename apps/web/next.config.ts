@@ -23,6 +23,12 @@ const SENTRY_RELEASE_SHA: string = (() => {
 })();
 
 const config: NextConfig = {
+  // Next 16 blocks /_next/* dev resources from non-localhost origins by
+  // default, which leaves LAN phone-testing sessions as frozen SSR HTML
+  // (no JS, no images). Dev-server-only setting — ignored by production
+  // builds. Extend via DEV_LAN_ORIGINS (comma-separated) if the LAN IP
+  // changes.
+  allowedDevOrigins: ['192.168.68.110', ...(process.env.DEV_LAN_ORIGINS?.split(',') ?? [])],
   // Allow workspace packages to be transpiled (the tela monorepo dependencies)
   transpilePackages: ['@tela/api'],
   experimental: {

@@ -23,7 +23,8 @@ echo "══ guard: refusing production targets"
 run bash scripts/lib/assert-not-prod.sh
 
 echo "══ 1/5 drizzle migrations"
-run pnpm db:migrate
+# pnpm --filter (not the root turbo task): turbo strict env strips DATABASE_URL
+run pnpm --filter @tela/db db:migrate
 
 echo "══ 2/5 manual SQL (RLS, grants, hardening)"
 run node packages/db/scripts/apply-manual.mjs
@@ -35,7 +36,7 @@ run node packages/capabilities/scripts/setup-models-bucket.mjs
 echo "══ 4/5 seeds (prompts, stylist content, rate limits, eval user)"
 # prompts:sync + stylist seed need @tela/db built (cold worktrees have no dists)
 pnpm --filter @tela/db build
-run pnpm prompts:sync
+run pnpm --filter @tela/prompts prompts:sync
 run node packages/db/scripts/seed-stylist-content.mjs
 run node packages/db/scripts/seed-rate-limits.mjs
 run node packages/db/scripts/seed-eval-user.mjs

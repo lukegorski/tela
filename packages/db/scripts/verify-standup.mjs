@@ -44,7 +44,7 @@ try {
   const cols = colGrant.map((c) => c.column_name).join(',');
   report('users column grant (manual_002)', cols === 'auth_user_id,features,id', cols || 'none');
 
-  const dml = await sql`SELECT count(*)::int AS n FROM information_schema.role_table_grants
+  const [dml] = await sql`SELECT count(*)::int AS n FROM information_schema.role_table_grants
     WHERE table_schema = 'public' AND grantee IN ('anon', 'authenticated', 'service_role')
       AND privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')`;
   report('client roles have zero table-level DML (manual_003)', dml.n === 0, `found ${dml.n} grants`);

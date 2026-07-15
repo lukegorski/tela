@@ -48,6 +48,11 @@ jobs:
 
       - name: Build workspace
         run: pnpm build
+        env:
+          # Same build-time placeholders as ci.yml — /en/builder prerenders a
+          # Supabase client, so the web build fails without these set.
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
 
       - name: Install Doppler CLI
         run: |

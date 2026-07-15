@@ -7,6 +7,9 @@ export PATH="$HOME/.nvm/versions/node/v22.15.0/bin:$HOME/bin:$PATH"
 DOPPLER="$HOME/bin/doppler"
 cd "$(dirname "$0")/.."
 
+# Dev-only harness: refuse to run against the production Supabase project.
+"$DOPPLER" run --project tela --config dev -- bash scripts/lib/assert-not-prod.sh
+
 echo "══════════════════════════════════════════════════════════"
 echo "1/3  Unit tests (P3 reconciliation + entitlements truth table)"
 echo "══════════════════════════════════════════════════════════"
